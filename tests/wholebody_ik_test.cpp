@@ -26,21 +26,36 @@ int main(int argc, char** argv)
 {
     std::cout<<" -- This is a test to check the wholebody_ik library --"<<std::endl;
 
-    bool right=true; //change this to perform the test for left or right arm (it is also a parameter from outside, e.g. "wholebody_ik_test 0" is to use the left arm)
+    bool right=true; //change this to perform the test for left or right arm
+    bool arm=true; //change this to perform the test for arms or legs (these are also parameters from outside, e.g. "wholebody_ik_test 0 0" is to use the left leg)
     
-    if(argc>1)
+    if(argc>2)
     {
-        if(argc!=2)
+        if(argc!=3)
         {
-            std::cout<<"Please use 1 or none parameter!"<<std::endl;
+            std::cout<<"Please use 2 or none parameter!"<<std::endl;
             return -1;
         }
         right = std::atoi(argv[1]);
+        arm = std::atoi(argv[2]);
     }
 
-    std::string arm = right?"right_arm":"left_arm";
+    std::string chain="";
 
-    std::cout<<" -- using arm: "<<arm<<" --"<<std::endl;
+    if(right)
+        if(arm)
+            chain = "right_arm";
+        else
+            chain = "right_leg";
+    else
+        if(arm)
+            chain = "left_arm";
+        else
+            chain = "left_leg";
+
+    if(chain=="") {std::cout<<"WRONG CHAIN!"<<std::endl; return -1;}
+
+    std::cout<<" -- using chain: "<<chain<<" --"<<std::endl;
     
     yarp::os::ResourceFinder rf;
     rf.setVerbose(true);
@@ -57,9 +72,9 @@ int main(int argc, char** argv)
     
     std::map<std::string,KDL::Frame> desired_poses;
 
-    desired_poses[arm]; //desired ee pose in object frame: t_p_e
-
-    yarp::sig::Vector q_out(7,0.0);
+    desired_poses[chain]; //desired ee pose in object frame: t_p_e
+    
+    yarp::sig::Vector q_out;
 
     if( !ros::isInitialized() )
     {
@@ -68,66 +83,75 @@ int main(int argc, char** argv)
 
     ros::AsyncSpinner as(2);
 
-    visual_utils vutils("t","e","gaze");
+    visual_utils* vutils;
+    KDL::Frame initial_pose; //should come from sensing
+    yarp::sig::Vector q_init;
+    
+    if(chain == "right_arm")
+    {
+        initial_pose = KDL::Frame(KDL::Rotation::RPY(-0.122, -0.001, 0.349),KDL::Vector(0.075, -0.413, -0.832));
+        desired_poses.at(chain) = KDL::Frame(KDL::Rotation::RPY(-0.122, -0.001, 0.349),KDL::Vector(0.075, -0.413, -0.632));
+        q_out = yarp::sig::Vector(7,0.0);
+        q_init = yarp::sig::Vector(q_out.size(),0.0);
+        q_init[1] = -0.2; //NOTE: arms joints limits
+        vutils = new visual_utils("e","DWYTorso");
+    }
+
+    if(chain == "left_arm")
+    {
+        initial_pose = KDL::Frame(KDL::Rotation::RPY(0.087, -0.001, -0.349),KDL::Vector(0.065, 0.385, -0.834));
+        desired_poses.at(chain) = KDL::Frame(KDL::Rotation::RPY(0.087, -0.001, -0.349),KDL::Vector(0.065, 0.385, -0.634));
+        q_out = yarp::sig::Vector(7,0.0);
+        q_init = yarp::sig::Vector(q_out.size(),0.0);
+        q_init[1] = 0.2; //NOTE: arms joints limits
+        vutils = new visual_utils("e","DWYTorso");
+    }
+
+    if(chain == "right_leg")
+    {
+        initial_pose = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.006, -0.181, -1.083));
+        desired_poses.at(chain) = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.006, -0.181, -0.95));
+        q_out = yarp::sig::Vector(6,0.0);
+        q_init = yarp::sig::Vector(q_out.size(),0.0);
+        q_init[2] = -0.3; //NOTE: to start far from the singularity
+        q_init[3] = 0.6; //NOTE: to start far from the singularity
+        q_init[4] = -0.3; //NOTE: to start far from the singularity
+        vutils = new visual_utils("e","Waist");
+    }
+
+    if(chain == "left_leg")
+    {
+        initial_pose = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.006, 0.181, -1.083));
+        desired_poses.at(chain) = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.006, 0.181, -0.95));
+        q_out = yarp::sig::Vector(6,0.0);
+        q_init = yarp::sig::Vector(q_out.size(),0.0);
+        q_init[2] = -0.3; //NOTE: to start far from the singularity
+        q_init[3] = 0.6; //NOTE: to start far from the singularity
+        q_init[4] = -0.3; //NOTE: to start far from the singularity
+        vutils = new visual_utils("e","Waist");
+    }
 
     std::vector<double> joints;
-    joints.resize(7);
-    double x=-0.6,y=0.5,z=0.5;
-    if(!right) y = -0.5;
-    double sign=-1;
-    
-    KDL::Frame initial_pose; //should come from sensing
-    KDL::Frame trash_pose;
-    
-    if(right)
-    {
-        desired_poses.at(arm) = KDL::Frame(KDL::Rotation::RPY(0,-M_PI/2.0,0),KDL::Vector(0,0,0)) * KDL::Frame(KDL::Rotation::RPY(0,0,-M_PI/2.0),KDL::Vector(0,0,0));
-        initial_pose = KDL::Frame(KDL::Rotation::Quaternion(-0.098, -0.017, 0.173, 0.980),KDL::Vector(-0.590, 0.024, -0.505));
-        trash_pose = KDL::Frame(KDL::Rotation::RPY(0,-M_PI/2.0,0),KDL::Vector::Zero()) * KDL::Frame(KDL::Rotation::Identity(),KDL::Vector(0.3,-0.3,0));
-    }
-    else
-    {
-        desired_poses.at(arm) = KDL::Frame(KDL::Rotation::RPY(0,-M_PI/2.0,0),KDL::Vector(0,0,0)) * KDL::Frame(KDL::Rotation::RPY(0,0,M_PI/2.0),KDL::Vector(0,0,0));
-        initial_pose = KDL::Frame(KDL::Rotation::Quaternion(0.098, -0.017, -0.173, 0.980),KDL::Vector(-0.590, -0.024, -0.505));
-        trash_pose = KDL::Frame(KDL::Rotation::RPY(0,-M_PI/2.0,0),KDL::Vector::Zero()) * KDL::Frame(KDL::Rotation::Identity(),KDL::Vector(0.3,0.3,0));
-    }
-
-    double qs[7] = {0,right?-0.2:0.2,0,0,0,0,0};
-    yarp::sig::Vector q_init(7,qs);
+    joints.resize(q_out.size());
     yarp::sig::Vector q_sense = q_init;
 
-    IK.initialize(arm,desired_poses.at(arm),q_sense);
-    KDL::Frame t_T_h (KDL::Rotation::Identity(),KDL::Vector(x,y,z));
-    IK.set_new_object_head_transform(arm, t_T_h.Inverse());
+    IK.initialize(chain,desired_poses.at(chain),q_sense);
 
-    
     for(int i=0;i<q_out.size();i++)
     {
         joints.at(i) = q_sense[i];
     }
-    vutils.set_data(desired_poses.at(arm), t_T_h, joints, !right);
+    vutils->set_data(desired_poses.at(chain), joints, chain);
 
     double traj_duration = 3.0;
-    trajectory_generator traj_gen, trash_traj_gen;
-    trajectory_generator* current_traj = &traj_gen;
-    traj_gen.line_initialize(traj_duration,initial_pose,desired_poses.at(arm));
-    trash_traj_gen.line_initialize(traj_duration,desired_poses.at(arm),trash_pose);
+    trajectory_generator traj_gen;
+    traj_gen.line_initialize(traj_duration,initial_pose,desired_poses.at(chain));
     
     ros::Time start = ros::Time::now();
     ros::Duration exp;
-    KDL::Frame next_pose, obj_next_pose;
-    KDL::Twist next_twist, obj_next_twist;
+    KDL::Frame next_pose;
+    KDL::Twist next_twist;
     double secs;
-    bool first = true;
-
-    // simulating robot movement
-    
-    KDL::Frame t_TFinal_h = KDL::Frame(KDL::Rotation::Identity(),KDL::Vector(0.4,0,0))*t_T_h;
-    trajectory_generator obj_traj_gen, obj_trash_traj_gen;
-    trajectory_generator* current_obj_tra = &obj_traj_gen;    
-    obj_traj_gen.line_initialize(traj_duration,t_T_h,t_TFinal_h);
-    obj_trash_traj_gen.line_initialize(traj_duration,t_TFinal_h,t_TFinal_h);
-
     double old_t = secs = 0;
 
     while(ros::ok())
@@ -135,19 +159,15 @@ int main(int argc, char** argv)
         old_t = secs;
         secs = exp.toSec() + ((double)exp.toNSec()) / 1000000000.0;
 
-        current_traj->line_trajectory(secs,next_pose,next_twist);
-        IK.set_desired_ee_pose(arm,next_pose);
+        traj_gen.line_trajectory(secs,next_pose,next_twist);
+        IK.set_desired_ee_pose(chain,next_pose);
 
         #ifndef NDEBUG
 	utils clock;
 	clock.tic();
         #endif
 
-        current_obj_tra->line_trajectory(secs,obj_next_pose,obj_next_twist);
-        IK.set_new_object_head_transform(arm, obj_next_pose.Inverse()); 
-//         IK.set_new_object_head_transform(arm, obj_next_pose.Inverse(),secs-old_t); //pass a delta_time to update the shoulder position w.r.t. the object
-
-	double cart_error = IK.cartToJnt(arm,q_sense,q_out);
+	double cart_error = IK.cartToJnt(chain,q_sense,q_out);
 
         #ifndef NDEBUG
 	clock.toc();
@@ -160,7 +180,7 @@ int main(int argc, char** argv)
             joints.at(i) = q_out[i];
         }
 
-        vutils.set_data(next_pose, obj_next_pose, joints, !right);
+        vutils->set_data(next_pose, joints, chain);
 
 	usleep(500000);
 
@@ -171,23 +191,13 @@ int main(int argc, char** argv)
             start = ros::Time::now();
             secs=0;
 
-            if(first)
-            {
-                current_traj = &trash_traj_gen;
-                first = false;
-                current_obj_tra = &obj_trash_traj_gen;
-            }
-            else
-            {
-                current_traj = &traj_gen;
-                q_sense=q_init; //restarting
-                first = true;
-                current_obj_tra = &obj_traj_gen;
-            }
+            q_sense=q_init; //restarting
         }
 
         exp = ros::Time::now()-start;
     }
+
+    delete vutils;
 
     return 0;
 }

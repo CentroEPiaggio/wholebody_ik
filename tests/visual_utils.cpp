@@ -28,31 +28,15 @@ class visual_utils
 public:
 
 int right_arm_index, left_arm_index;
+int right_leg_index, left_leg_index;
 
-visual_utils(std::string base_frame, std::string e_frame, std::string robot_frame)
+visual_utils(std::string e_frame, std::string base_frame)
 {
     // just because tf tree coherence
-    e_T_o.frame_id_ = base_frame;
-    e_T_o.child_frame_id_ = e_frame;
-    r_T_o.frame_id_ = robot_frame;
-    r_T_o.child_frame_id_ = base_frame;
+    e_T_b.frame_id_ = base_frame;
+    e_T_b.child_frame_id_ = e_frame;
 
-    e_T_o.setData(tf::Transform::getIdentity());
-    r_T_o.setData(tf::Transform::getIdentity());
-
-    marker.color.a=1;
-    marker.color.b=1;
-    marker.header.frame_id = base_frame;
-    marker.type = visualization_msgs::Marker::CYLINDER;
-    marker.scale.x = 0.1;
-    marker.scale.y = 0.1;
-    marker.scale.z = 1;
-    marker.pose.orientation.w=0.71;
-    marker.pose.orientation.x=0.71;
-    marker.pose.orientation.y=0;
-    marker.pose.orientation.z=0;
-
-    marker_pub = nh.advertise<visualization_msgs::Marker>("object",1);
+    e_T_b.setData(tf::Transform::getIdentity());
 
     joints_pub = nh.advertise<sensor_msgs::JointState>("joint_states",1);
 
@@ -75,20 +59,24 @@ visual_utils(std::string base_frame, std::string e_frame, std::string robot_fram
     joints.name.push_back("LForearmPlate");
     joints.name.push_back("LWrj1");
     joints.name.push_back("LWrj2");
+    
+    right_leg_index = joints.name.size();
 
-    joints.name.push_back("RHipSag");
     joints.name.push_back("RHipLat");
     joints.name.push_back("RHipYaw");
+    joints.name.push_back("RHipSag");
     joints.name.push_back("RKneeSag");
-    joints.name.push_back("RAnkLat");
     joints.name.push_back("RAnkSag");
-
-    joints.name.push_back("LHipSag");
+    joints.name.push_back("RAnkLat");
+    
+    left_leg_index = joints.name.size();
+    
     joints.name.push_back("LHipLat");
     joints.name.push_back("LHipYaw");
     joints.name.push_back("LKneeSag");
-    joints.name.push_back("LAnkLat");
+    joints.name.push_back("LHipSag");
     joints.name.push_back("LAnkSag");
+    joints.name.push_back("LAnkLat");
 
     joints.name.push_back("WaistSag");
     joints.name.push_back("WaistLat");
@@ -114,10 +102,8 @@ void publishing_loop()
     {
         data_mutex.lock();
 
-        e_T_o.stamp_ = ros::Time::now();
-        r_T_o.stamp_ = ros::Time::now();
-        tf_broadcaster.sendTransform(e_T_o);
-        tf_broadcaster.sendTransform(r_T_o);
+        e_T_b.stamp_ = ros::Time::now();
+        tf_broadcaster.sendTransform(e_T_b);
         if(joints.position.size()!=0)
         {
             joints.header.stamp = ros::Time::now();
@@ -132,55 +118,46 @@ void publishing_loop()
     }
 }
 
-void set_object_robot_tf(KDL::Frame object_T_robot)
+void set_target(KDL::Frame base_T_ee)
 {
     data_mutex.lock();
-    tf::Transform otr;
-    tf::transformKDLToTF(object_T_robot,otr);
-    r_T_o.setData(otr.inverse());
+    tf::Transform bTe;
+    tf::transformKDLToTF(base_T_ee,bTe);
+    e_T_b.setData(bTe);
     data_mutex.unlock();
 }
 
-void set_object_target(KDL::Frame object_T_ee)
-{
-    data_mutex.lock();
-    tf::Transform otr;
-    tf::transformKDLToTF(object_T_ee,otr);
-    e_T_o.setData(otr);
-    data_mutex.unlock();
-}
-
-void set_arm_joints( std::vector<double> arm_joints, bool left_arm)
+void set_chain_joints( std::vector<double> chain_joints, std::string chain)
 {
     data_mutex.lock();
 
-    int i = (left_arm)?left_arm_index:right_arm_index;
-    for(int j=0;j<7;j++)
+    int i;
+    i = (chain=="right_arm")?right_arm_index:i;
+    i = (chain=="left_arm")?left_arm_index:i;
+    i = (chain=="right_leg")?right_leg_index:i;
+    i = (chain=="left_leg")?left_leg_index:i;
+
+    for(int j=0;j<chain_joints.size();j++)
     {
-        this->joints.position.at(i) = arm_joints.at(j);
+        this->joints.position.at(i) = chain_joints.at(j);
         i++;
     }
-    marker_pub.publish(marker);
     data_mutex.unlock();
 }
 
-void set_data(KDL::Frame object_T_ee, KDL::Frame object_T_robot, std::vector<double> arm_joints, bool left_arm)
+void set_data(KDL::Frame base_T_ee, std::vector<double> chain_joints, std::string chain)
 {
-    set_arm_joints(arm_joints,left_arm);
-    set_object_robot_tf(object_T_robot);
-    set_object_target(object_T_ee);
+    set_chain_joints(chain_joints,chain);
+    set_target(base_T_ee);
 }
 
 private:
     ros::NodeHandle nh;
     ros::Publisher joints_pub;
-    ros::Publisher marker_pub;
     tf::TransformBroadcaster tf_broadcaster;
 
-    tf::StampedTransform r_T_o;
-    tf::StampedTransform e_T_o;
+    tf::StampedTransform e_T_b;
     sensor_msgs::JointState joints;
-    visualization_msgs::Marker marker;
 
     std::mutex data_mutex;
     std::thread* th;
