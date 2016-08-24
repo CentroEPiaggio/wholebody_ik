@@ -161,12 +161,12 @@ bool wholebody_ik_thread::prepare_for_new_target()
     if(!initialized[arm])
     {
         ik.initialize(arm,t_T_h*current_pose,q_arm);
-	ik.set_new_object_head_transform(arm, t_T_h.Inverse()); // t_T_H = W_T_h
+// 	ik.set_new_object_head_transform(arm, t_T_h.Inverse()); // t_T_H = W_T_h
 
         initialized[arm]=true;
     }
 
-    ik.reset_init_joints(arm,q_arm);
+//     ik.reset_init_joints(arm,q_arm);
     done=false;
 
     return true;

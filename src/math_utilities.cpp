@@ -115,6 +115,16 @@ static Eigen::Matrix<double,7,6> pseudoInverseQR_76(const Eigen::Matrix<double,6
   return Q.leftCols(Rtot.topRows(Rtot.cols()).cols())*Rtot.topRows(Rtot.cols()).transpose().inverse();
 }
 
+static Eigen::Matrix<double,6,6> pseudoInverseQR_66(const Eigen::Matrix<double,6,6> &a, double epsilon = std::numeric_limits<double>::epsilon())
+{
+  Eigen::HouseholderQR<Eigen::Matrix<double,6,6>> qr(a.transpose());
+
+  Eigen::Matrix<double,6,6> Rtot = qr.matrixQR().template triangularView<Eigen::Upper>();
+
+  Eigen::Matrix<double,6,6> Q = qr.householderQ();
+  
+  return Q.leftCols(Rtot.topRows(Rtot.cols()).cols())*Rtot.topRows(Rtot.cols()).transpose().inverse();
+}
 
 static inline void vectorKDLToEigen(const KDL::Vector& k, Eigen::Vector3d& e)
 {
@@ -130,11 +140,11 @@ static inline void vectorYARPToEigen(const yarp::sig::Vector& k, Eigen::Vector3d
   e[2]=k[2];
 }
 
-static inline void vectorYARPToEigen(const yarp::sig::Vector& k, Eigen::Matrix<double,7,1>& e) //NOTE: works only for 7 elements vector
+static inline void vectorYARPToEigen(const yarp::sig::Vector& k, Eigen::MatrixXd& e)
 {
   for(int i=0;i<k.size();i++)
   {
-    e[i]=k[i];
+    e(i)=k[i];
   }
 }
 
