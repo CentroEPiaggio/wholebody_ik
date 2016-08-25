@@ -73,8 +73,8 @@ visual_utils(std::string e_frame, std::string base_frame)
     
     joints.name.push_back("LHipLat");
     joints.name.push_back("LHipYaw");
-    joints.name.push_back("LKneeSag");
     joints.name.push_back("LHipSag");
+    joints.name.push_back("LKneeSag");
     joints.name.push_back("LAnkSag");
     joints.name.push_back("LAnkLat");
 

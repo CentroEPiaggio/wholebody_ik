@@ -254,6 +254,15 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 
     Eigen::MatrixXd d_q;
 
+    if(dofs==ARM_DOFS)
+    {
+        d_q = Eigen::Matrix<double,ARM_DOFS,1>();
+    }
+    if(dofs==LEG_DOFS)
+    {
+        d_q = Eigen::Matrix<double,LEG_DOFS,1>();
+    }
+
     if (!cartesian_action_completed(chain,precision))
     {
 //         yarp::sig::Matrix jacco(6,dofs);
@@ -270,7 +279,6 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
         if(dofs==ARM_DOFS)
         {
             In = Eigen::Matrix<double,ARM_DOFS,ARM_DOFS>();
-            d_q = Eigen::Matrix<double,ARM_DOFS,1>();
             des_q = Eigen::Matrix<double,ARM_DOFS,1>();
             input_q = Eigen::Matrix<double,ARM_DOFS,1>();
             pinvJ = Eigen::Matrix<double,ARM_DOFS,6>();
@@ -279,7 +287,6 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
         if(dofs==LEG_DOFS)
         {
             In = Eigen::Matrix<double,LEG_DOFS,LEG_DOFS>();
-            d_q = Eigen::Matrix<double,LEG_DOFS,1>();
             des_q = Eigen::Matrix<double,LEG_DOFS,1>();
             input_q = Eigen::Matrix<double,LEG_DOFS,1>();
             pinvJ = Eigen::Matrix<double,LEG_DOFS,6>();
@@ -291,7 +298,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 	des_q.setZero();
 	des_q(1)=(chain=="right_arm")?0.35:des_q(1);
         des_q(1)=(chain=="left_arm")?-0.35:des_q(1);
-        static double K_null = (chain=="right_arm" || chain=="left_arm")?0.05:0.0; //HACK to avoid arms joint limits
+        double K_null = (chain=="right_arm" || chain=="left_arm")?0.05:0.0; //HACK to avoid arms joint limits
 
         math_utilities::vectorYARPToEigen(q_input,input_q);
 
