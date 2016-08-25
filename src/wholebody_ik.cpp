@@ -38,6 +38,13 @@ using namespace yarp::math;
 
 chain_data::chain_data(std::string robot_name, std::string urdf_path, std::string srdf_path, std::string ee_link, std::string base_link, int dofs, std::string chain_name): idynutils(robot_name,urdf_path,srdf_path)
 {
+    yarp::sig::Vector joint_max = idynutils.iDyn3_model.getJointBoundMax();
+    joint_max[idynutils.iDyn3_model.getDOFIndex("RElbj")] = -0.02;
+    joint_max[idynutils.iDyn3_model.getDOFIndex("LElbj")] = -0.02;
+    idynutils.iDyn3_model.setJointBoundMax(joint_max);
+
+    idynutils.iDyn3_model.setAllConstraints(false);
+
     if(chain_name=="right_arm") { kin_chain = &idynutils.right_arm; jacobian = Eigen::Matrix<double,6,ARM_DOFS>();}
     if(chain_name=="left_arm") {kin_chain = &idynutils.left_arm; jacobian = Eigen::Matrix<double,6,ARM_DOFS>();}
     if(chain_name=="right_leg") {kin_chain = &idynutils.right_leg; jacobian = Eigen::Matrix<double,6,LEG_DOFS>();}
