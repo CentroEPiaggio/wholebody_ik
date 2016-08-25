@@ -89,8 +89,8 @@ int main(int argc, char** argv)
     
     if(chain == "right_arm")
     {
-        initial_pose = KDL::Frame(KDL::Rotation::RPY(-0.122, -0.001, 0.349),KDL::Vector(0.075, -0.413, -0.832));
-        desired_poses.at(chain) = KDL::Frame(KDL::Rotation::RPY(-0.122, -0.001, 0.349),KDL::Vector(0.075, -0.413, -0.632));
+        initial_pose = KDL::Frame(KDL::Rotation::RPY(-0.122, -0.001, 0.349),KDL::Vector(0.075, -0.413, -0.413));
+        desired_poses.at(chain) = KDL::Frame(KDL::Rotation::RPY(-0.122, -0.001, 0.349),KDL::Vector(0.075, -0.413, -0.213));
         q_out = yarp::sig::Vector(7,0.0);
         q_init = yarp::sig::Vector(q_out.size(),0.0);
         q_init[1] = -0.2; //NOTE: arms joints limits
@@ -100,8 +100,8 @@ int main(int argc, char** argv)
 
     if(chain == "left_arm")
     {
-        initial_pose = KDL::Frame(KDL::Rotation::RPY(0.087, -0.001, -0.349),KDL::Vector(0.065, 0.385, -0.834));
-        desired_poses.at(chain) = KDL::Frame(KDL::Rotation::RPY(0.087, -0.001, -0.349),KDL::Vector(0.065, 0.385, -0.634));
+        initial_pose = KDL::Frame(KDL::Rotation::RPY(0.087, -0.001, -0.349),KDL::Vector(0.065, 0.385, -0.415));
+        desired_poses.at(chain) = KDL::Frame(KDL::Rotation::RPY(0.087, -0.001, -0.349),KDL::Vector(0.065, 0.385, -0.215));
         q_out = yarp::sig::Vector(7,0.0);
         q_init = yarp::sig::Vector(q_out.size(),0.0);
         q_init[1] = 0.2; //NOTE: arms joints limits

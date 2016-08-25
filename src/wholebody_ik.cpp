@@ -38,7 +38,6 @@ using namespace yarp::math;
 
 chain_data::chain_data(std::string robot_name, std::string urdf_path, std::string srdf_path, std::string ee_link, std::string base_link, int dofs, std::string chain_name): idynutils(robot_name,urdf_path,srdf_path)
 {
-    
     if(chain_name=="right_arm") { kin_chain = &idynutils.right_arm; jacobian = Eigen::Matrix<double,6,ARM_DOFS>();}
     if(chain_name=="left_arm") {kin_chain = &idynutils.left_arm; jacobian = Eigen::Matrix<double,6,ARM_DOFS>();}
     if(chain_name=="right_leg") {kin_chain = &idynutils.right_leg; jacobian = Eigen::Matrix<double,6,LEG_DOFS>();}
@@ -54,8 +53,8 @@ chain_data::chain_data(std::string robot_name, std::string urdf_path, std::strin
 
 wholebody_ik::wholebody_ik(std::string robot_name,std::string urdf_path, std::string srdf_path, int period_ms): d_t(period_ms/1000.0), robot("wb_ik", robot_name, urdf_path, srdf_path)
 {    
-    chains["right_arm"] = new chain_data(robot_name,urdf_path,srdf_path,"RSoftHand","DWYTorso", ARM_DOFS, "right_arm");
-    chains["left_arm"] = new chain_data(robot_name,urdf_path,srdf_path,"LSoftHand","DWYTorso", ARM_DOFS, "left_arm");
+    chains["right_arm"] = new chain_data(robot_name,urdf_path,srdf_path,"RSoftHand","Waist", ARM_DOFS, "right_arm");
+    chains["left_arm"] = new chain_data(robot_name,urdf_path,srdf_path,"LSoftHand","Waist", ARM_DOFS, "left_arm");
     chains["right_leg"] = new chain_data(robot_name,urdf_path,srdf_path,"r_sole","Waist", LEG_DOFS, "right_leg");
     chains["left_leg"] = new chain_data(robot_name,urdf_path,srdf_path,"l_sole","Waist", LEG_DOFS, "left_leg");
 }
