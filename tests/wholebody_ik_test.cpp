@@ -82,7 +82,7 @@ int main(int argc, char** argv)
     }
 
     ros::AsyncSpinner as(2);
-
+    std::vector<std::string> chains;
     visual_utils* vutils;
     KDL::Frame initial_pose; //should come from sensing
     yarp::sig::Vector q_init;
@@ -94,7 +94,8 @@ int main(int argc, char** argv)
         q_out = yarp::sig::Vector(7,0.0);
         q_init = yarp::sig::Vector(q_out.size(),0.0);
         q_init[1] = -0.2; //NOTE: arms joints limits
-        vutils = new visual_utils("e","DWYTorso");
+        chains.push_back(chain);
+        vutils = new visual_utils("e","Waist",chains);
     }
 
     if(chain == "left_arm")
@@ -104,7 +105,8 @@ int main(int argc, char** argv)
         q_out = yarp::sig::Vector(7,0.0);
         q_init = yarp::sig::Vector(q_out.size(),0.0);
         q_init[1] = 0.2; //NOTE: arms joints limits
-        vutils = new visual_utils("e","DWYTorso");
+        chains.push_back(chain);
+        vutils = new visual_utils("e","Waist",chains);
     }
 
     if(chain == "right_leg")
@@ -116,7 +118,8 @@ int main(int argc, char** argv)
         q_init[2] = -0.3; //NOTE: to start far from the singularity
         q_init[3] = 0.6; //NOTE: to start far from the singularity
         q_init[4] = -0.3; //NOTE: to start far from the singularity
-        vutils = new visual_utils("e","Waist");
+        chains.push_back(chain);
+        vutils = new visual_utils("e","Waist",chains);
     }
 
     if(chain == "left_leg")
@@ -128,7 +131,8 @@ int main(int argc, char** argv)
         q_init[2] = -0.3; //NOTE: to start far from the singularity
         q_init[3] = 0.6; //NOTE: to start far from the singularity
         q_init[4] = -0.3; //NOTE: to start far from the singularity
-        vutils = new visual_utils("e","Waist");
+        chains.push_back(chain);
+        vutils = new visual_utils("e","Waist",chains);
     }
 
     std::vector<double> joints;

@@ -30,13 +30,16 @@ public:
 int right_arm_index, left_arm_index;
 int right_leg_index, left_leg_index;
 
-visual_utils(std::string e_frame, std::string base_frame)
+visual_utils(std::string e_frame, std::string base_frame, std::vector<std::string> chains)
 {
-    // just because tf tree coherence
-    e_T_b.frame_id_ = base_frame;
-    e_T_b.child_frame_id_ = e_frame;
-
-    e_T_b.setData(tf::Transform::getIdentity());
+    int c=0;
+    for(auto chain:chains)
+    {
+        e_T_b[chain].frame_id_ = base_frame;
+        e_T_b.at(chain).child_frame_id_ = e_frame + "_" + std::to_string(c);
+        c++;
+        e_T_b.at(chain).setData(tf::Transform::getIdentity());
+    }
 
     joints_pub = nh.advertise<sensor_msgs::JointState>("joint_states",1);
 
@@ -102,8 +105,12 @@ void publishing_loop()
     {
         data_mutex.lock();
 
-        e_T_b.stamp_ = ros::Time::now();
-        tf_broadcaster.sendTransform(e_T_b);
+        for(auto& T:e_T_b)
+        {
+            T.second.stamp_ = ros::Time::now();
+            tf_broadcaster.sendTransform(T.second);
+        }
+
         if(joints.position.size()!=0)
         {
             joints.header.stamp = ros::Time::now();
@@ -118,12 +125,12 @@ void publishing_loop()
     }
 }
 
-void set_target(KDL::Frame base_T_ee)
+void set_chain_target(KDL::Frame base_T_ee,std::string chain)
 {
     data_mutex.lock();
     tf::Transform bTe;
     tf::transformKDLToTF(base_T_ee,bTe);
-    e_T_b.setData(bTe);
+    e_T_b[chain].setData(bTe);
     data_mutex.unlock();
 }
 
@@ -148,7 +155,7 @@ void set_chain_joints( std::vector<double> chain_joints, std::string chain)
 void set_data(KDL::Frame base_T_ee, std::vector<double> chain_joints, std::string chain)
 {
     set_chain_joints(chain_joints,chain);
-    set_target(base_T_ee);
+    set_chain_target(base_T_ee,chain);
 }
 
 private:
@@ -156,7 +163,7 @@ private:
     ros::Publisher joints_pub;
     tf::TransformBroadcaster tf_broadcaster;
 
-    tf::StampedTransform e_T_b;
+    std::map<std::string, tf::StampedTransform> e_T_b;
     sensor_msgs::JointState joints;
 
     std::mutex data_mutex;
