@@ -66,7 +66,7 @@ int main(int argc, char** argv)
     q_init.at("right_arm")[0] = 0.6; //NOTE: to start far from the singularity
     q_init.at("right_arm")[1] = -0.2; //NOTE: arms joints limits
     q_init.at("right_arm")[3] = -1.2; //NOTE: to start far from the singularity
-    q_init.at("right_arm")[4] = -0.6; //NOTE: to start far from the singularity
+    q_init.at("right_arm")[5] = -0.6; //NOTE: to start far from the singularity
     q_sense["right_arm"] = q_init.at("right_arm");
     joints["right_arm"];
     joints.at("right_arm").resize(q_out.at("right_arm").size());
@@ -79,7 +79,7 @@ int main(int argc, char** argv)
     q_init.at("left_arm")[0] = 0.6; //NOTE: to start far from the singularity
     q_init.at("left_arm")[1] = 0.2; //NOTE: arms joints limits
     q_init.at("left_arm")[3] = -1.2; //NOTE: to start far from the singularity
-    q_init.at("left_arm")[4] = -0.6; //NOTE: to start far from the singularity
+    q_init.at("left_arm")[5] = -0.6; //NOTE: to start far from the singularity
     q_sense["left_arm"] = q_init.at("left_arm");
     joints["left_arm"];
     joints.at("left_arm").resize(q_out.at("left_arm").size());
