@@ -43,7 +43,7 @@ chain_data::chain_data(std::string robot_name, std::string urdf_path, std::strin
     joint_max[idynutils.iDyn3_model.getDOFIndex("LElbj")] = -0.02;
     idynutils.iDyn3_model.setJointBoundMax(joint_max);
 
-    idynutils.iDyn3_model.setAllConstraints(false);
+    idynutils.iDyn3_model.setAllConstraints(false); //to use joints limits
 
     if(chain_name=="right_arm") { kin_chain = &idynutils.right_arm; jacobian = Eigen::Matrix<double,6,ARM_DOFS>();}
     if(chain_name=="left_arm") {kin_chain = &idynutils.left_arm; jacobian = Eigen::Matrix<double,6,ARM_DOFS>();}

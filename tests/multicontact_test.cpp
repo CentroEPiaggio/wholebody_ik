@@ -59,21 +59,27 @@ int main(int argc, char** argv)
     chains.push_back("left_leg");
     visual_utils vutils("e","Waist",chains);
     
-    initial_poses["right_arm"] = KDL::Frame(KDL::Rotation::RPY(-0.122, -0.001, 0.349),KDL::Vector(0.186, -0.413, -0.413));
-    desired_poses["right_arm"] = initial_poses["right_arm"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0,-0.2,0.2));
+    initial_poses["right_arm"] = KDL::Frame(KDL::Rotation::RPY(-0.830, -1.194, 0.831),KDL::Vector(0.410, -0.45, -0.14));
+    desired_poses["right_arm"] = initial_poses["right_arm"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.2,-0.2,-0.2));
     q_out["right_arm"] = yarp::sig::Vector(7,0.0);
     q_init["right_arm"] = yarp::sig::Vector(q_out.at("right_arm").size(),0.0);
+    q_init.at("right_arm")[0] = 0.6; //NOTE: to start far from the singularity
     q_init.at("right_arm")[1] = -0.2; //NOTE: arms joints limits
+    q_init.at("right_arm")[3] = -1.2; //NOTE: to start far from the singularity
+    q_init.at("right_arm")[4] = -0.6; //NOTE: to start far from the singularity
     q_sense["right_arm"] = q_init.at("right_arm");
     joints["right_arm"];
     joints.at("right_arm").resize(q_out.at("right_arm").size());
     traj_gens["right_arm"];
 
-    initial_poses["left_arm"] = KDL::Frame(KDL::Rotation::RPY(0.087, -0.001, -0.349),KDL::Vector(0.176, 0.385, -0.415));
-    desired_poses["left_arm"] = initial_poses["left_arm"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0,0.2,0.2));
+    initial_poses["left_arm"] = KDL::Frame(KDL::Rotation::RPY(0.872, -1.233, -0.887),KDL::Vector(0.410, 0.45, -0.14));
+    desired_poses["left_arm"] = initial_poses["left_arm"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.2,0.2,-0.2));
     q_out["left_arm"] = yarp::sig::Vector(7,0.0);
     q_init["left_arm"] = yarp::sig::Vector(q_out.at("left_arm").size(),0.0);
+    q_init.at("left_arm")[0] = 0.6; //NOTE: to start far from the singularity
     q_init.at("left_arm")[1] = 0.2; //NOTE: arms joints limits
+    q_init.at("left_arm")[3] = -1.2; //NOTE: to start far from the singularity
+    q_init.at("left_arm")[4] = -0.6; //NOTE: to start far from the singularity
     q_sense["left_arm"] = q_init.at("left_arm");
     joints["left_arm"];
     joints.at("left_arm").resize(q_out.at("left_arm").size());
@@ -134,7 +140,7 @@ int main(int argc, char** argv)
 
             double cart_error = IK.cartToJnt(traj_gen.first,q_sense.at(traj_gen.first),q_out.at(traj_gen.first));
 
-            std::cout<<"err: "<<cart_error<<std::endl;
+            if(cart_error==-1) std::cout<<" -- error: "<<traj_gen.first<<std::endl;
 
             for(int i=0;i<q_out.at(traj_gen.first).size();i++)
             {
@@ -146,7 +152,7 @@ int main(int argc, char** argv)
             q_sense.at(traj_gen.first) = q_out.at(traj_gen.first);
         }
 
-        usleep(500000);
+        usleep(50000);
 
         if (secs > traj_duration)
         {
