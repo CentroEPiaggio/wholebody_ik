@@ -89,22 +89,28 @@ int main(int argc, char** argv)
     
     if(chain == "right_arm")
     {
-        initial_pose = KDL::Frame(KDL::Rotation::RPY(-0.122, -0.001, 0.349),KDL::Vector(0.075, -0.413, -0.413));
-        desired_poses.at(chain) = KDL::Frame(KDL::Rotation::RPY(-0.122, -0.001, 0.349),KDL::Vector(0.075, -0.413, -0.213));
+        initial_pose = KDL::Frame(KDL::Rotation::RPY(-0.830, -1.194, 0.831),KDL::Vector(0.410, -0.45, -0.14));
+        desired_poses.at(chain) = initial_pose * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.2,-0.2,-0.2));
         q_out = yarp::sig::Vector(7,0.0);
         q_init = yarp::sig::Vector(q_out.size(),0.0);
+        q_init[0] = 0.6; //NOTE: to start far from the singularity
         q_init[1] = -0.2; //NOTE: arms joints limits
+        q_init[3] = -1.2; //NOTE: to start far from the singularity
+        q_init[5] = -0.6; //NOTE: to start far from the singularity
         chains.push_back(chain);
         vutils = new visual_utils("e","Waist",chains);
     }
 
     if(chain == "left_arm")
     {
-        initial_pose = KDL::Frame(KDL::Rotation::RPY(0.087, -0.001, -0.349),KDL::Vector(0.065, 0.385, -0.415));
-        desired_poses.at(chain) = KDL::Frame(KDL::Rotation::RPY(0.087, -0.001, -0.349),KDL::Vector(0.065, 0.385, -0.215));
+        initial_pose = KDL::Frame(KDL::Rotation::RPY(0.872, -1.233, -0.887),KDL::Vector(0.410, 0.45, -0.14));
+        desired_poses.at(chain) = initial_pose * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.2,0.2,-0.2));
         q_out = yarp::sig::Vector(7,0.0);
         q_init = yarp::sig::Vector(q_out.size(),0.0);
+        q_init[0] = 0.6; //NOTE: to start far from the singularity
         q_init[1] = 0.2; //NOTE: arms joints limits
+        q_init[3] = -1.2; //NOTE: to start far from the singularity
+        q_init[5] = -0.6; //NOTE: to start far from the singularity
         chains.push_back(chain);
         vutils = new visual_utils("e","Waist",chains);
     }

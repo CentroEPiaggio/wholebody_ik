@@ -47,9 +47,8 @@ public:
     KDL::Frame ee_current;
     KDL::Frame ee_desired;        
     double car_err;
-//     Eigen::Matrix<double,6,7> jacobian;
+
     Eigen::MatrixXd jacobian;
-    Eigen::MatrixXd Weights;
 
     bool first_step;
 

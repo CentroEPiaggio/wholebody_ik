@@ -63,6 +63,10 @@ visual_utils(std::string e_frame, std::string base_frame, std::vector<std::strin
     joints.name.push_back("LWrj1");
     joints.name.push_back("LWrj2");
     
+    joints.name.push_back("WaistSag");
+    joints.name.push_back("WaistLat");
+    joints.name.push_back("WaistYaw");
+
     right_leg_index = joints.name.size();
 
     joints.name.push_back("RHipLat");
@@ -71,6 +75,9 @@ visual_utils(std::string e_frame, std::string base_frame, std::vector<std::strin
     joints.name.push_back("RKneeSag");
     joints.name.push_back("RAnkSag");
     joints.name.push_back("RAnkLat");
+    
+    joints.name.push_back("NeckPitchj");
+    joints.name.push_back("NeckYawj");
     
     left_leg_index = joints.name.size();
     
@@ -81,13 +88,6 @@ visual_utils(std::string e_frame, std::string base_frame, std::vector<std::strin
     joints.name.push_back("LAnkSag");
     joints.name.push_back("LAnkLat");
 
-    joints.name.push_back("WaistSag");
-    joints.name.push_back("WaistLat");
-    joints.name.push_back("WaistYaw");
-    
-    joints.name.push_back("NeckPitchj");
-    joints.name.push_back("NeckYawj");
-    
     for(auto item:joints.name) joints.position.push_back(0);
 
     th = new std::thread(&visual_utils::publishing_loop,this);
@@ -134,6 +134,18 @@ void set_chain_target(KDL::Frame base_T_ee,std::string chain)
     data_mutex.unlock();
 }
 
+void set_all_joints(std::vector<double> chain_joints)
+{
+    data_mutex.lock();
+
+    for(int j=0;j<chain_joints.size();j++)
+    {
+        joints.position.at(j) = chain_joints.at(j);
+    }
+
+    data_mutex.unlock();
+}
+
 void set_chain_joints( std::vector<double> chain_joints, std::string chain)
 {
     data_mutex.lock();
@@ -146,7 +158,7 @@ void set_chain_joints( std::vector<double> chain_joints, std::string chain)
 
     for(int j=0;j<chain_joints.size();j++)
     {
-        this->joints.position.at(i) = chain_joints.at(j);
+        joints.position.at(i) = chain_joints.at(j);
         i++;
     }
     data_mutex.unlock();
@@ -154,7 +166,9 @@ void set_chain_joints( std::vector<double> chain_joints, std::string chain)
 
 void set_data(KDL::Frame base_T_ee, std::vector<double> chain_joints, std::string chain)
 {
-    set_chain_joints(chain_joints,chain);
+    if(chain=="com_left_foot") set_all_joints(chain_joints);
+    else set_chain_joints(chain_joints,chain);
+
     set_chain_target(base_T_ee,chain);
 }
 

@@ -33,6 +33,7 @@
 #define LEG_DOFS 6
 #define TORSO_DOFS 3
 #define HEAD_DOFS 2
+#define WB_DOFS 31
 
 using namespace yarp::math;
 
@@ -50,6 +51,8 @@ chain_data::chain_data(std::string robot_name, std::string urdf_path, std::strin
     if(chain_name=="right_leg") {kin_chain = &idynutils.right_leg; jacobian = Eigen::Matrix<double,6,LEG_DOFS>();}
     if(chain_name=="left_leg") {kin_chain = &idynutils.left_leg; jacobian = Eigen::Matrix<double,6,LEG_DOFS>();}
 
+    if(chain_name=="com_left_foot" || chain_name=="com_right_foot") {jacobian = Eigen::Matrix<double,3,WB_DOFS>();}
+
     this->ee_link = ee_link;
     this->base_link = base_link;
     this->dofs = dofs;
@@ -64,6 +67,9 @@ wholebody_ik::wholebody_ik(std::string robot_name,std::string urdf_path, std::st
     chains["left_arm"] = new chain_data(robot_name,urdf_path,srdf_path,"LSoftHand","Waist", ARM_DOFS, "left_arm");
     chains["right_leg"] = new chain_data(robot_name,urdf_path,srdf_path,"r_sole","Waist", LEG_DOFS, "right_leg");
     chains["left_leg"] = new chain_data(robot_name,urdf_path,srdf_path,"l_sole","Waist", LEG_DOFS, "left_leg");
+
+    chains["com_left_foot"] = new chain_data(robot_name,urdf_path,srdf_path,"CoM","l_sole", WB_DOFS, "com_left_foot");
+    chains["com_right_foot"] = new chain_data(robot_name,urdf_path,srdf_path,"CoM","r_sole", WB_DOFS, "com_right_foot");
 }
 
 void wholebody_ik::print_eigen_matrix(const Eigen::MatrixXd& data)
@@ -112,13 +118,8 @@ bool wholebody_ik::initialize(std::string chain, KDL::Frame cartesian_pose, cons
         return false;
     }
 
-    Eigen::Matrix3d identity=Eigen::Matrix3d::Identity();
     int dofs = data->get_dofs();
     int dim=6;
-    data->Weights.resize(dim,dim);
-    data->Weights.setZero();
-    data->Weights.block<3,3>(0,0) = identity*1;
-    data->Weights.block<3,3>(3,3) = identity*1;
 
     data->car_err = 9999.0;
     data->first_step = true;
@@ -185,6 +186,7 @@ int compute_cols_to_remove(std::string chain)
     if(chain=="right_leg") cols_to_remove = LEG_DOFS;
     if(chain=="left_arm") cols_to_remove = 2*LEG_DOFS + TORSO_DOFS ;
     if(chain=="right_arm") cols_to_remove = 2*LEG_DOFS + TORSO_DOFS + ARM_DOFS + HEAD_DOFS;
+    if(chain=="com_left_foot" || chain=="com_right_foot") cols_to_remove = 6; //floating base
 
     return cols_to_remove;
 }
@@ -193,12 +195,10 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 {
     chain_data *data = chains.at(chain);
     int dofs = data->get_dofs();
+    bool com = (chain=="com_left_foot" || chain=="com_right_foot");
 
     if(!data->initialized) {warn_not_initialized(chain); return yarp::sig::Vector();}
-    
-    // base_link = {B} , ee_link = {E}
-    int e_index = data->idynutils.iDyn3_model.getLinkIndex(data->get_ee_link());
-    int b_index = data->idynutils.iDyn3_model.getLinkIndex(data->get_base_link());
+
     yarp::sig::Matrix e_J_be, b_J_be;
     KDL::Frame ee_kdl;
     KDL::Frame pos_d;
@@ -207,19 +207,45 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
     Eigen::Matrix3d L;
     yarp::sig::Vector Eo(3);
     Eigen::Vector3d zero; zero.setZero();
+    yarp::sig::Vector out(dofs ,0.0);
+    Eigen::MatrixXd d_q;
 
     yarp::sig::Vector q_all(data->idynutils.getJointNames().size(),0.0);
-    data->idynutils.fromRobotToIDyn(q_input,q_all,*data->kin_chain);
+    if(!com) data->idynutils.fromRobotToIDyn(q_input,q_all,*data->kin_chain);
+    else q_all=q_input;
     data->idynutils.updateiDyn3Model(q_all,false);
+
+    int e_index = 0;
+    int b_index = 0;
 
     //
     // ------ transforming the Jacobian in {B}
     //
-    data->idynutils.iDyn3_model.getRelativeJacobian(e_index,b_index,e_J_be);
-    yarp::sig::Matrix b_T_e = data->idynutils.iDyn3_model.getPosition(b_index,e_index); // THE SECOND W.R.T. THE FIRST
-    yarp::sig::Matrix null_vec(3,1); null_vec.zero();
-    b_T_e.setSubmatrix(null_vec,0,3);
-    b_J_be = locoman::utils::Adjoint(b_T_e) * e_J_be;
+    // base_link = {B} , ee_link = {E}
+    if(com)
+    {
+        if(!data->idynutils.iDyn3_model.getCOMJacobian(b_J_be))
+        {
+            std::cout<<" !! ERROR : UNABLE TO GET COM JACOBIAN !! "<<std::endl;
+            return out;
+        }
+    }
+    else
+    {
+        e_index = data->idynutils.iDyn3_model.getLinkIndex(data->get_ee_link());
+        b_index = data->idynutils.iDyn3_model.getLinkIndex(data->get_base_link());
+
+        if(!data->idynutils.iDyn3_model.getRelativeJacobian(e_index,b_index,e_J_be))
+        {
+            std::cout<<" !! ERROR : UNABLE TO GET JACOBIAN !! "<<std::endl;
+            return out;
+        }
+        
+        yarp::sig::Matrix b_T_e = data->idynutils.iDyn3_model.getPosition(b_index,e_index); // THE SECOND W.R.T. THE FIRST
+        yarp::sig::Matrix null_vec(3,1); null_vec.zero();
+        b_T_e.setSubmatrix(null_vec,0,3);
+        b_J_be = locoman::utils::Adjoint(b_T_e) * e_J_be;
+    }
 
     Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > ee_jac(b_J_be.data(),b_J_be.rows(),b_J_be.cols());
 
@@ -227,93 +253,135 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
         data->jacobian.block<6,ARM_DOFS>(0,0) = ee_jac.block<6,ARM_DOFS>(0,compute_cols_to_remove(chain));
     if(data->get_name()=="right_leg" || data->get_name()=="left_leg")
         data->jacobian.block<6,LEG_DOFS>(0,0) = ee_jac.block<6,LEG_DOFS>(0,compute_cols_to_remove(chain));
+    if(data->get_name()=="com_left_foot" || data->get_name()=="com_right_foot")
+        data->jacobian.block<3,WB_DOFS>(0,0) = ee_jac.block<3,WB_DOFS>(0,compute_cols_to_remove(chain));
 
-    //
-    // ------ transforming the ee position in {B}
-    //
-    math_utilities::FrameYARPToKDL(data->idynutils.iDyn3_model.getPosition(b_index,e_index),data->ee_current);
-
-    Eigen::Matrix<double,6,1> b_v_ee_desired;
-    Eigen::Vector3d temp;
-
-    //
-    // ------ computing the desired velocity b_v_ee_desired
-    //
-    math_utilities::vectorKDLToEigen((data->ee_desired.p - data->ee_current.p), temp);
-    b_v_ee_desired.block<3,1>(0,0) = temp;
-
-    yarp::sig::Matrix ee_d(3,3);
-    yarp::sig::Matrix ee_c(3,3);
-    math_utilities::rotationKDLToYarp(data->ee_desired.M,ee_d);
-    math_utilities::rotationKDLToYarp(data->ee_current.M,ee_c);
-    Eo = locoman::utils::Orient_Error(ee_d, ee_c);
-    math_utilities::vectorYARPToEigen(Eo,temp);
-    b_v_ee_desired.block<3,1>(3,0)=temp;
-
-    //
-    // ------ computing the pseudoinverse of the jacobian
-    //    
-//     Eigen::Matrix<double,7,6> pinvJ =  math_utilities::pseudoInverseQR_76(data->jacobian);
-
-    if(!data->first_step) data->car_err=b_v_ee_desired.norm();
-    else data->first_step = false;
-
-    Eigen::MatrixXd d_q;
-
-    if(dofs==ARM_DOFS)
+    if(!com)
     {
-        d_q = Eigen::Matrix<double,ARM_DOFS,1>();
-    }
-    if(dofs==LEG_DOFS)
-    {
-        d_q = Eigen::Matrix<double,LEG_DOFS,1>();
-    }
+        //
+        // ------ transforming the ee position in {B}
+        //
+        math_utilities::FrameYARPToKDL(data->idynutils.iDyn3_model.getPosition(b_index,e_index),data->ee_current);
 
-    if (!cartesian_action_completed(chain,precision))
-    {
-//         yarp::sig::Matrix jacco(6,dofs);
-//         Eigen::MatrixXd pseudo(dofs,6);
-//         math_utilities::matrixEigenToYARP(data->jacobian,jacco);
-//         math_utilities::matrixYARPToEigen(locoman::utils::Pinv_trunc_SVD(jacco),pseudo);
-//         d_q = pseudo * b_v_ee_desired;
+        Eigen::Matrix<double,6,1> b_v_ee_desired;
+        Eigen::Vector3d temp;
 
-        Eigen::MatrixXd pinvJ;
-	Eigen::MatrixXd In;
-        Eigen::MatrixXd des_q;
-        Eigen::MatrixXd input_q;
+        //
+        // ------ computing the desired velocity b_v_ee_desired
+        //
+        math_utilities::vectorKDLToEigen((data->ee_desired.p - data->ee_current.p), temp);
+        b_v_ee_desired.block<3,1>(0,0) = temp;
+
+        yarp::sig::Matrix ee_d(3,3);
+        yarp::sig::Matrix ee_c(3,3);
+        math_utilities::rotationKDLToYarp(data->ee_desired.M,ee_d);
+        math_utilities::rotationKDLToYarp(data->ee_current.M,ee_c);
+        Eo = locoman::utils::Orient_Error(ee_d, ee_c);
+        math_utilities::vectorYARPToEigen(Eo,temp);
+        b_v_ee_desired.block<3,1>(3,0)=temp;
+
+        //
+        // ------ computing the pseudoinverse of the jacobian
+        //    
+    //     Eigen::Matrix<double,7,6> pinvJ =  math_utilities::pseudoInverseQR_76(data->jacobian);
+
+        if(!data->first_step) data->car_err=b_v_ee_desired.norm();
+        else data->first_step = false;
 
         if(dofs==ARM_DOFS)
         {
-            In = Eigen::Matrix<double,ARM_DOFS,ARM_DOFS>();
-            des_q = Eigen::Matrix<double,ARM_DOFS,1>();
-            input_q = Eigen::Matrix<double,ARM_DOFS,1>();
-            pinvJ = Eigen::Matrix<double,ARM_DOFS,6>();
-            pinvJ = math_utilities::pseudoInverseQR_76(data->jacobian);
+            d_q = Eigen::Matrix<double,ARM_DOFS,1>();
         }
         if(dofs==LEG_DOFS)
         {
-            In = Eigen::Matrix<double,LEG_DOFS,LEG_DOFS>();
-            des_q = Eigen::Matrix<double,LEG_DOFS,1>();
-            input_q = Eigen::Matrix<double,LEG_DOFS,1>();
-            pinvJ = Eigen::Matrix<double,LEG_DOFS,6>();
-            pinvJ = math_utilities::pseudoInverseQR_66(data->jacobian);
+            d_q = Eigen::Matrix<double,LEG_DOFS,1>();
         }
 
-	In.setZero();
-	for(int w=0;w<dofs;w++) In(w,w)=1.0;
-	des_q.setZero();
-	des_q(1)=(chain=="right_arm")?0.35:des_q(1);
-        des_q(1)=(chain=="left_arm")?-0.35:des_q(1);
-        double K_null = (chain=="right_arm" || chain=="left_arm")?0.05:0.0; //HACK to avoid arms joint limits
+        if (!cartesian_action_completed(chain,precision))
+        {
+    //         yarp::sig::Matrix jacco(6,dofs);
+    //         Eigen::MatrixXd pseudo(dofs,6);
+    //         math_utilities::matrixEigenToYARP(data->jacobian,jacco);
+    //         math_utilities::matrixYARPToEigen(locoman::utils::Pinv_trunc_SVD(jacco),pseudo);
+    //         d_q = pseudo * b_v_ee_desired;
 
-        math_utilities::vectorYARPToEigen(q_input,input_q);
+            Eigen::MatrixXd pinvJ;
+            Eigen::MatrixXd In;
+            Eigen::MatrixXd des_q;
+            Eigen::MatrixXd input_q;
 
-	d_q = pinvJ* b_v_ee_desired/d_t + (In-pinvJ*data->jacobian) *K_null* (des_q-input_q);
+            if(dofs==ARM_DOFS)
+            {
+                In = Eigen::Matrix<double,ARM_DOFS,ARM_DOFS>();
+                des_q = Eigen::Matrix<double,ARM_DOFS,1>();
+                input_q = Eigen::Matrix<double,ARM_DOFS,1>();
+                pinvJ = Eigen::Matrix<double,ARM_DOFS,6>();
+                pinvJ = math_utilities::pseudoInverseQR_76(data->jacobian);
+            }
+            if(dofs==LEG_DOFS)
+            {
+                In = Eigen::Matrix<double,LEG_DOFS,LEG_DOFS>();
+                des_q = Eigen::Matrix<double,LEG_DOFS,1>();
+                input_q = Eigen::Matrix<double,LEG_DOFS,1>();
+                pinvJ = Eigen::Matrix<double,LEG_DOFS,6>();
+                pinvJ = math_utilities::pseudoInverseQR_66(data->jacobian);
+            }
+
+            In.setZero();
+            for(int w=0;w<dofs;w++) In(w,w)=1.0;
+            des_q.setZero();
+            des_q(1)=(chain=="right_arm")?0.35:des_q(1);
+            des_q(1)=(chain=="left_arm")?-0.35:des_q(1);
+            double K_null = (chain=="right_arm" || chain=="left_arm")?0.05:0.0; //HACK to avoid arms joint limits
+
+            math_utilities::vectorYARPToEigen(q_input,input_q);
+
+            d_q = pinvJ* b_v_ee_desired/d_t + (In-pinvJ*data->jacobian) *K_null* (des_q-input_q);
+        }
+        else
+            d_q.setZero();
     }
-    else
-        d_q.setZero();
+    else // -------------------- COM ---------------------------
+    {
+        KDL::Vector com_pos;
+        math_utilities::vectorYARPToKDL(data->idynutils.iDyn3_model.getCOM(),com_pos);
+        data->ee_current.M = KDL::Rotation::Identity();
+        data->ee_current.p = com_pos;
 
-    yarp::sig::Vector out(dofs ,0.0);
+        Eigen::Matrix<double,3,1> b_v_ee_desired;
+        Eigen::Vector3d temp;
+
+        //
+        // ------ computing the desired velocity b_v_ee_desired
+        //
+        math_utilities::vectorKDLToEigen((data->ee_desired.p - data->ee_current.p), temp);
+        b_v_ee_desired.block<3,1>(0,0) = temp;
+
+        if(!data->first_step) data->car_err=b_v_ee_desired.norm();
+        else data->first_step = false;
+
+        d_q = Eigen::Matrix<double,WB_DOFS,1>();
+
+        if (!cartesian_action_completed(chain,precision))
+        {
+            Eigen::MatrixXd pinvJ;
+            Eigen::MatrixXd In;
+            Eigen::MatrixXd des_q;
+            Eigen::MatrixXd input_q;
+
+            In = Eigen::Matrix<double,WB_DOFS,WB_DOFS>();
+            des_q = Eigen::Matrix<double,WB_DOFS,1>();
+            input_q = Eigen::Matrix<double,WB_DOFS,1>();
+            pinvJ = Eigen::Matrix<double,WB_DOFS,6>();
+            pinvJ = math_utilities::pseudoInverseQR_316(data->jacobian);
+
+            math_utilities::vectorYARPToEigen(q_input,input_q);
+
+            d_q = pinvJ* b_v_ee_desired/d_t;
+        }
+        else
+            d_q.setZero();
+    }
 
     for(int i = 0;i<dofs;i++)
     {

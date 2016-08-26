@@ -106,11 +106,14 @@ install(TARGETS wholebody_ik_lib
 target_include_directories(wholebody_ik_lib PUBLIC "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>"
                                                "$<INSTALL_INTERFACE:${${VARS_PREFIX}_INSTALL_INCLUDEDIR}>")
 
+add_executable(com_ik_test tests/com_ik_test.cpp tests/visual_utils.cpp)
+TARGET_LINK_LIBRARIES(com_ik_test wholebody_ik_lib ${roscpp_LIBRARIES} ${tf_LIBRARIES} ${tf_conversions_LIBRARIES} ${trajectory_generator_LIBRARIES})
+
+add_executable(limbs_ik_test tests/limbs_ik_test.cpp tests/visual_utils.cpp)
+TARGET_LINK_LIBRARIES(limbs_ik_test wholebody_ik_lib ${roscpp_LIBRARIES} ${tf_LIBRARIES} ${tf_conversions_LIBRARIES} ${trajectory_generator_LIBRARIES})
+
 add_executable(wholebody_ik_test tests/wholebody_ik_test.cpp tests/visual_utils.cpp)
 TARGET_LINK_LIBRARIES(wholebody_ik_test wholebody_ik_lib ${roscpp_LIBRARIES} ${tf_LIBRARIES} ${tf_conversions_LIBRARIES} ${trajectory_generator_LIBRARIES})
-
-add_executable(multicontact_test tests/multicontact_test.cpp tests/visual_utils.cpp)
-TARGET_LINK_LIBRARIES(multicontact_test wholebody_ik_lib ${roscpp_LIBRARIES} ${tf_LIBRARIES} ${tf_conversions_LIBRARIES} ${trajectory_generator_LIBRARIES})
 
 install(DIRECTORY include/
         DESTINATION "${${VARS_PREFIX}_INSTALL_INCLUDEDIR}"
@@ -129,9 +132,11 @@ include(AddUninstallTarget)
 
 add_subdirectory(app)
 
-install(TARGETS wholebody_ik_test RUNTIME DESTINATION bin)
+install(TARGETS com_ik_test RUNTIME DESTINATION bin)
 
-install(TARGETS multicontact_test RUNTIME DESTINATION bin)
+install(TARGETS limbs_ik_test RUNTIME DESTINATION bin)
+
+install(TARGETS wholebody_ik_test RUNTIME DESTINATION bin)
 
 # control module                    
 ADD_EXECUTABLE(wholebody_ik_module tests/module/wholebody_ik_module_main.cpp 
