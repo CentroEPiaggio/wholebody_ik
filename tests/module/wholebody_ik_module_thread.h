@@ -23,10 +23,12 @@
 
 #include <GYM/control_thread.hpp>
 #include <GYM/yarp_command_interface.hpp>
-#include <drc_shared/yarp_msgs/locomanipulation_msg.h>
+#include <drc_shared/yarp_msgs/wholebody_ik_msg.h>
 
 #include <wholebody_ik/wholebody_ik.h>
 #include <trajectory_generator/trajectory_generator.h>
+
+#include <vector>
 
 /**
  * @brief wholebody_ik control thread
@@ -34,6 +36,22 @@
  **/
 namespace walkman
 {
+    class chain_data
+    {
+    public:
+        chain_data(std::string name);
+        void print();
+
+        std::string name;
+        std::string ee_link;
+        kinematic_chain* kin_chain;
+        trajectory_generator traj_gen;
+        KDL::Frame current_pose;
+        KDL::Frame desired_pose;
+        bool initialized;
+        bool done;
+    };
+
     class wholebody_ik_thread : public control_thread
     {
     private:
@@ -44,30 +62,23 @@ namespace walkman
         yarp::sig::Vector home;
         yarp::sig::Vector q_init;
         
-        locomanipulation_msg msg;
-        walkman::yarp_custom_command_interface<locomanipulation_msg> receive_from_pci;
+        wholebody_ik_msg msg;
+        walkman::yarp_custom_command_interface<wholebody_ik_msg> recv_interface;
         int recv_num=0;
-        walkman::yarp_command_sender_interface send_to_pci;
-        int send_num=0;
 
         void go_in_initial_position();
         bool going_to_initial_position=false;
 
+        std::vector<std::string> available_commands;
+        bool generate_poses_from_cmd(std::string cmd);
         bool prepare_for_new_target();
-        KDL::Frame current_pose;
 
         wholebody_ik ik;
-        std::map<std::string,bool> initialized;
-        bool done=false;
-        KDL::Frame t_T_h;
-        std::string arm = "right_arm";
-        kinematic_chain* chain;
-        trajectory_generator traj_gen;
+        std::vector<std::string> available_chains;
+        std::map<std::string,chain_data> chains;
+
         double time = 0;
         double duration = 3.0;
-
-        yarp::sig::Vector joint_min;
-        yarp::sig::Vector joint_max;
     public:
         /**
         * @brief constructor

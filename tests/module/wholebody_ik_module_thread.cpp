@@ -23,23 +23,39 @@
 #include <kdl/frames_io.hpp>
 #include "math_utilities.cpp"
 
-#define DEG2RAD    (M_PI/180.0)
-
 using namespace yarp::math;
-
 using namespace yarp::os;
 using namespace yarp::sig;
 using namespace walkman;
 
+walkman::chain_data::chain_data(std::string name)
+{
+    this->name = name;
+
+    current_pose = KDL::Frame::Identity();
+    desired_pose = KDL::Frame::Identity();
+    initialized = false;
+    done = false;
+}
+
+void walkman::chain_data::print()
+{
+    std::cout<<std::endl<<"Printing chain data: "<<name<<std::endl;
+    std::cout<<" - name: "<<name<<std::endl;
+    std::cout<<" - ee_link: "<<ee_link<<std::endl;
+    std::cout<<" - initialized: "<<initialized<<std::endl;
+    std::cout<<" - done: "<<done<<std::endl;
+    std::cout<<" - current_pose: "<<current_pose<<std::endl;
+    std::cout<<" - desired_pose: "<<desired_pose<<std::endl<<std::endl;
+}
+
 wholebody_ik_thread::wholebody_ik_thread( std::string module_prefix, yarp::os::ResourceFinder rf, std::shared_ptr< paramHelp::ParamHelperServer > ph):
-control_thread( module_prefix, rf, ph ), receive_from_pci("pci_control_interface"), send_to_pci("control_pci_interface"), ik(get_robot_name(),get_urdf_path(),get_srdf_path(),get_thread_period())
+control_thread( module_prefix, rf, ph ), recv_interface("wb_interface"), ik(get_robot_name(),get_urdf_path(),get_srdf_path(),get_thread_period())
 {
     input.resize(model.iDyn3_model.getNrOfDOFs(),0.0);
     output.resize(model.iDyn3_model.getNrOfDOFs(),0.0);
     home.resize(model.iDyn3_model.getNrOfDOFs(),0.0);
     q_init.resize(model.iDyn3_model.getNrOfDOFs(),0.0);
-    joint_min.resize(model.iDyn3_model.getNrOfDOFs(),0.0);
-    joint_max.resize(model.iDyn3_model.getNrOfDOFs(),0.0);
     
     yarp::sig::Vector q_right_arm(7,0.0);
     yarp::sig::Vector q_left_arm(7,0.0);
@@ -51,44 +67,56 @@ control_thread( module_prefix, rf, ph ), receive_from_pci("pci_control_interface
     q_head[0] = 0.0;
     q_head[1] = 0.0;
 
-    q_right_arm[0]=30.0*DEG2RAD;
-    q_right_arm[1]=-10.0*DEG2RAD;
-    q_right_arm[2]=20.0*DEG2RAD;
-    q_right_arm[3]=-35.0*DEG2RAD;
-    q_right_arm[4]=0.0*DEG2RAD;
-    q_right_arm[5]=-30.0*DEG2RAD;
-    q_right_arm[6]=0.0*DEG2RAD;
+    q_right_arm[0]=  0.6;
+    q_right_arm[1]= -0.2;
+    q_right_arm[3]= -1.2;
+    q_right_arm[5]= -0.6;
 
-    q_left_arm[0]=30.0*DEG2RAD;
-    q_left_arm[1]=10.0*DEG2RAD;
-    q_left_arm[2]=-20.0*DEG2RAD;
-    q_left_arm[3]=-35.0*DEG2RAD;
-    q_left_arm[4]=0.0*DEG2RAD;
-    q_left_arm[5]=-30.0*DEG2RAD;
-    q_left_arm[6]=0.0*DEG2RAD;
+    q_left_arm[0]=  0.6;
+    q_left_arm[1]=  0.2;
+    q_left_arm[3]= -1.2;
+    q_left_arm[5]= -0.6;
     
     q_torso[0] = 0.0;
-    q_torso[1] = -0.4*DEG2RAD;
+    q_torso[1] = 0.0;
     q_torso[2] = 0.0;
+ 
+    q_right_leg[2]= -0.3;
+    q_right_leg[3]=  0.6;
+    q_right_leg[4]= -0.3;
     
-    q_right_leg[0]=2.5*DEG2RAD;
-    q_right_leg[1]=0.015*DEG2RAD;
-    q_right_leg[2]=-20.8*DEG2RAD;
-    q_right_leg[3]=33.4*DEG2RAD;
-    q_right_leg[4]=-12.0*DEG2RAD;
-    q_right_leg[5]=-2.5*DEG2RAD;
-    
-    q_left_leg[0]=-2.5*DEG2RAD;
-    q_left_leg[1]=-0.015*DEG2RAD;
-    q_left_leg[2]=-20.8*DEG2RAD;
-    q_left_leg[3]=33.4*DEG2RAD;
-    q_left_leg[4]=-12.0*DEG2RAD;
-    q_left_leg[5]=2.5*DEG2RAD;
+    q_left_leg[2]= -0.3;
+    q_left_leg[3]=  0.6;
+    q_left_leg[4]= -0.3;
 
     robot.fromRobotToIdyn(q_right_arm,q_left_arm,q_torso,q_right_leg,q_left_leg,q_head,home);
 
-    initialized["left_arm"]=false;
-    initialized["right_arm"]=false;
+    available_chains.push_back("left_arm");
+    available_chains.push_back("right_arm");
+    available_chains.push_back("left_leg");
+    available_chains.push_back("right_leg");
+
+    for(auto name:available_chains)
+    {
+        chains.emplace(name,chain_data(name));
+    }
+
+    chains.at("left_arm").kin_chain = &model.left_arm;
+    chains.at("right_arm").kin_chain = &model.right_arm;
+    chains.at("left_leg").kin_chain = &model.left_leg;
+    chains.at("right_leg").kin_chain = &model.right_leg;
+
+    chains.at("left_arm").ee_link = "LSoftHand";
+    chains.at("right_arm").ee_link = "RSoftHand";
+    chains.at("left_leg").ee_link = "l_sole";
+    chains.at("right_leg").ee_link = "r_sole";
+
+    available_commands.push_back("hands_up");
+    available_commands.push_back("hands_down");
+    available_commands.push_back("hands_forward");
+    available_commands.push_back("hands_backward");
+    available_commands.push_back("hands_wide");
+    available_commands.push_back("hands_tight");
 }
 
 bool wholebody_ik_thread::custom_init()
@@ -104,21 +132,6 @@ bool wholebody_ik_thread::custom_init()
     output = input;
     robot.setPositionDirectMode();
 
-    // joints limits
-    joint_max = model.iDyn3_model.getJointBoundMax();
-    joint_min = model.iDyn3_model.getJointBoundMin();
-    for (int i=0;i<input.size();i++)
-    {
-        if (input[i]>joint_max[i])
-        {
-            std::cout<<"error: "<<model.getJointNames().at(i)<<"("<<input[i]<<") is outside maximum bound: "<<joint_max[i]<<std::endl;
-        }
-        if (input[i]<joint_min[i])
-        {
-            std::cout<<"error: "<<model.getJointNames().at(i)<<"("<<input[i]<<") is outside minimum bound: "<<joint_min[i]<<std::endl;
-        }
-    }
-    
     // initial position
     go_in_initial_position();
 
@@ -133,42 +146,70 @@ void wholebody_ik_thread::go_in_initial_position()
     going_to_initial_position = true;
 }
 
+bool wholebody_ik_thread::generate_poses_from_cmd(std::string cmd)
+{
+    if( std::find(available_commands.begin(), available_commands.end(), cmd)==available_commands.end() )
+    {
+        std::cout<<" !! ERROR: command not available !!"<<std::endl;
+        return false;
+    }
+
+    double offset_x=0;
+    double offset_y=0;
+    double offset_z=0;
+
+    if(cmd=="hands_up") offset_z=0.1;
+    else if(cmd=="hands_down") offset_z=-0.1;
+    else if(cmd=="hands_forward") offset_x=0.1;
+    else if(cmd=="hands_backward") offset_x=-0.1;
+    else if(cmd=="hands_wide") offset_y=-0.1;
+    else if(cmd=="hands_tight") offset_y=0.1;
+
+    msg.desired_poses["left_arm"];
+    msg.desired_poses["right_arm"];
+
+    for(auto& pose:msg.desired_poses)
+    {
+        math_utilities::FrameYARPToKDL(model.iDyn3_model.getPosition(model.iDyn3_model.getLinkIndex("Waist"),model.iDyn3_model.getLinkIndex(chains.at(pose.first).ee_link)),chains.at(pose.first).current_pose);
+
+        pose.second = chains.at(pose.first).current_pose;
+
+        pose.second.p.x(pose.second.p.x() + offset_x);
+        pose.second.p.y(pose.second.p.y() + ((pose.first=="right_arm")?1:-1) * offset_y);
+        pose.second.p.z(pose.second.p.z() + offset_z);
+    }
+
+    return true;
+}
 
 bool wholebody_ik_thread::prepare_for_new_target()
 {
-    std::string arm_link;
-
-    if(msg.hand=="right")
+    for(auto des_pose:msg.desired_poses)
     {
-        chain = &model.right_arm;
-        arm = "right_arm";
-        arm_link = "RSoftHand";
+        if(!chains.count(des_pose.first))
+        {
+            std::cout<<" !! ERROR: chain not available !!"<<std::endl;
+            return false;
+        }
+
+        
+        math_utilities::FrameYARPToKDL(model.iDyn3_model.getPosition(model.iDyn3_model.getLinkIndex("Waist"),model.iDyn3_model.getLinkIndex(chains.at(des_pose.first).ee_link)),chains.at(des_pose.first).current_pose);
+
+        chains.at(des_pose.first).desired_pose = des_pose.second;
+
+        if(!chains.at(des_pose.first).initialized)
+        {
+            yarp::sig::Vector q_i(chains.at(des_pose.first).kin_chain->getNrOfDOFs(),0.0);
+            model.fromIDynToRobot(input, q_i, *chains.at(des_pose.first).kin_chain);
+            ik.initialize(chains.at(des_pose.first).name,chains.at(des_pose.first).current_pose,q_i);
+            chains.at(des_pose.first).initialized=true;
+
+//             chains.at(des_pose.first).print();
+        }
+
+        chains.at(des_pose.first).done=false;
     }
-    else if(msg.hand=="left")
-    {
-        chain = &model.left_arm;
-        arm = "left_arm";
-        arm_link = "LSoftHand";
-    }
-    else return false;
-
-    math_utilities::FrameYARPToKDL(model.iDyn3_model.getPosition(model.iDyn3_model.getLinkIndex("gaze"),model.iDyn3_model.getLinkIndex(arm_link)),current_pose);
-    math_utilities::FrameYARPToKDL(model.iDyn3_model.getPosition(model.iDyn3_model.getLinkIndex("Waist"),model.iDyn3_model.getLinkIndex("gaze")),t_T_h);
-
-    yarp::sig::Vector q_arm(7,0.0);
-    model.fromIDynToRobot(input, q_arm, *chain);
-
-    if(!initialized[arm])
-    {
-        ik.initialize(arm,t_T_h*current_pose,q_arm);
-// 	ik.set_new_object_head_transform(arm, t_T_h.Inverse()); // t_T_H = W_T_h
-
-        initialized[arm]=true;
-    }
-
-//     ik.reset_init_joints(arm,q_arm);
-    done=false;
-
+    
     return true;
 }
 
@@ -177,42 +218,27 @@ void wholebody_ik_thread::run()
     sense();
 
     // get the command
-    if(receive_from_pci.getCommand(msg,recv_num))
+    if(recv_interface.getCommand(msg,recv_num))
     {
-        if(msg.command=="locomanipulate")
+        std::cout<<"Command received: "<<msg.command<<std::endl;
+
+        if(msg.command=="reset")
         {
-            std::cout<<"Command received"<<std::endl;
+            go_in_initial_position();
+            time=0;
+        }
+        else
+        {
+            if(msg.command!="poses") generate_poses_from_cmd(msg.command);
 
             if(!prepare_for_new_target())
             {
                 std::cout<<"Received malformed command, abort"<<std::endl;
                 return;
             }
-//             t_T_h = msg.t_T_h; NOTE: this is to use the Waist as "object" (to be compliant with walking current implementation, we will see how to change it in the future)
-            traj_gen.line_initialize(duration,t_T_h*current_pose,msg.data);
 
-            time=0;
+            for(auto& chain:chains) chain.second.traj_gen.line_initialize(duration,chain.second.current_pose,chain.second.desired_pose);
 
-        }
-
-        if(msg.command=="test")
-        {
-            std::cout<<"Executing Test"<<std::endl;
-
-            prepare_for_new_target();
-
-            double sign;
-            if(msg.hand=="right") sign=-1;
-            else sign = 1;
-
-            traj_gen.line_initialize(duration,t_T_h*current_pose,KDL::Frame(KDL::Rotation::RPY(0,-M_PI/2.0,0),KDL::Vector(0,0,0)) * KDL::Frame(KDL::Rotation::RPY(0,0,sign*M_PI/2.0),KDL::Vector(0,0,0)));
-            time=0;
-
-        }
-
-        if(msg.command=="reset")
-        {
-            go_in_initial_position();
             time=0;
         }
     }
@@ -232,47 +258,47 @@ void wholebody_ik_thread::control_law()
 {
     time = time + get_thread_period()/1000.0;
 
-    if(initialized[arm] && !done)
+    for(auto& chain:chains)
     {
-        if(time>duration)
+        if(chain.second.initialized && !chain.second.done)
         {
-            send_to_pci.sendCommand("done");
-            done=true;
-        }
-
-        KDL::Frame next_pose;
-        KDL::Twist next_twist;
-        traj_gen.line_trajectory(time,next_pose,next_twist);
-
-        ik.set_desired_ee_pose(arm,next_pose);
-
-        yarp::sig::Vector q_arm(7,0.0);
-        yarp::sig::Vector q_out(7,0.0);
-        model.fromIDynToRobot(input, q_arm, *chain);
-	double cart_error = ik.cartToJnt(arm,q_arm,q_out,0.0001);
-
-        std::cout<<"cart_error: "<<cart_error<<std::endl;
-
-        model.fromRobotToIDyn(q_out, output, *chain);
-
-        for (int i=0;i<output.size();i++)
-        {
-            if (output[i]>joint_max[i])
+            if(time>duration)
             {
-                std::cout<<"desired output: "<<model.getJointNames().at(i)<<"("<<output[i]<<") is outside maximum bound: "<<joint_max[i]<<" current: "<<input[i]<<std::endl;
+                std::cout<<" -- done"<<std::endl;
+                chain.second.done=true;
             }
-            if (output[i]<joint_min[i])
+
+            KDL::Frame next_pose;
+            KDL::Twist next_twist;
+            chain.second.traj_gen.line_trajectory(time,next_pose,next_twist);
+
+            ik.set_desired_ee_pose(chain.second.name,next_pose);
+
+            yarp::sig::Vector q_arm(chain.second.kin_chain->getNrOfDOFs(), 0.0);
+            yarp::sig::Vector q_out(chain.second.kin_chain->getNrOfDOFs(), 0.0);
+            model.fromIDynToRobot(input, q_arm, *chain.second.kin_chain);
+            double cart_error = ik.cartToJnt(chain.second.name,q_arm,q_out,0.0001);
+
+            if(cart_error==-1)
             {
-                std::cout<<"desired output: "<<model.getJointNames().at(i)<<"("<<output[i]<<") is outside minimum bound: "<<joint_min[i]<<" current: "<<input[i]<<std::endl;
+                std::cout<<" !! ERROR in IK !! ( "<<chain.first<<" ) -> I won't move."<<std::endl;
+                chain.second.done=true;
+                return;
             }
+
+            model.fromRobotToIDyn(q_out, output, *chain.second.kin_chain);
         }
     }
 
     if(going_to_initial_position)
     {
-        double alpha = (time>1)?1:time;
+        double alpha = (time>3)?1:time/3.0;
         output = (1-alpha)*q_init + (alpha)*home;
-        if(time>1) going_to_initial_position = false;
+        if(time>3)
+        {
+            going_to_initial_position = false;
+            std::cout<<" - Ready"<<std::endl;
+        }
     }
 }
 
