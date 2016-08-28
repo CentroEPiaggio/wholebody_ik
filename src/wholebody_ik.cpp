@@ -119,7 +119,10 @@ bool wholebody_ik::initialize(std::string chain, KDL::Frame cartesian_pose, cons
     }
 
     int dofs = data->get_dofs();
-    int dim=6;
+    int dim;
+    if(chain=="com_left_foot" || chain=="com_right_foot") dim=3;
+    else dim=6;
+    
 
     data->car_err = 9999.0;
     data->first_step = true;
@@ -158,6 +161,8 @@ bool wholebody_ik::cartesian_action_completed(std::string chain, double precisio
 double wholebody_ik::cartToJnt(std::string chain, const yarp::sig::Vector& q_input, yarp::sig::Vector& q_out,double precision)
 {
     if(!chains.at(chain)->initialized) {warn_not_initialized(chain); return -1;}
+
+    if(chain=="com_left_foot" || chain=="com_right_foot") precision=0.01;
 
     q_out = q_input;
     unsigned int i;
@@ -283,7 +288,6 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
         //
         // ------ computing the pseudoinverse of the jacobian
         //    
-    //     Eigen::Matrix<double,7,6> pinvJ =  math_utilities::pseudoInverseQR_76(data->jacobian);
 
         if(!data->first_step) data->car_err=b_v_ee_desired.norm();
         else data->first_step = false;
@@ -299,12 +303,6 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 
         if (!cartesian_action_completed(chain,precision))
         {
-    //         yarp::sig::Matrix jacco(6,dofs);
-    //         Eigen::MatrixXd pseudo(dofs,6);
-    //         math_utilities::matrixEigenToYARP(data->jacobian,jacco);
-    //         math_utilities::matrixYARPToEigen(locoman::utils::Pinv_trunc_SVD(jacco),pseudo);
-    //         d_q = pseudo * b_v_ee_desired;
-
             Eigen::MatrixXd pinvJ;
             Eigen::MatrixXd In;
             Eigen::MatrixXd des_q;
@@ -372,8 +370,8 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
             In = Eigen::Matrix<double,WB_DOFS,WB_DOFS>();
             des_q = Eigen::Matrix<double,WB_DOFS,1>();
             input_q = Eigen::Matrix<double,WB_DOFS,1>();
-            pinvJ = Eigen::Matrix<double,WB_DOFS,6>();
-            pinvJ = math_utilities::pseudoInverseQR_316(data->jacobian);
+            pinvJ = Eigen::Matrix<double,WB_DOFS,3>();
+            pinvJ = math_utilities::pseudoInverseQR_313(data->jacobian);
 
             math_utilities::vectorYARPToEigen(q_input,input_q);
 
@@ -397,4 +395,6 @@ wholebody_ik::~wholebody_ik()
     delete chains.at("left_arm");
     delete chains.at("right_leg");
     delete chains.at("left_leg");
+    delete chains.at("com_left_foot");
+    delete chains.at("com_right_foot");
 }

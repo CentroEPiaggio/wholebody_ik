@@ -45,7 +45,7 @@ visual_utils(std::string e_frame, std::string base_frame, std::vector<std::strin
 
     right_arm_index = joints.name.size();
 
-    joints.name.push_back("RShSag");
+    joints.name.push_back("RShSag"); // 0
     joints.name.push_back("RShLat");
     joints.name.push_back("RShYaw");
     joints.name.push_back("RElbj");
@@ -55,7 +55,7 @@ visual_utils(std::string e_frame, std::string base_frame, std::vector<std::strin
 
     left_arm_index = joints.name.size();
 
-    joints.name.push_back("LShSag");
+    joints.name.push_back("LShSag"); // 7
     joints.name.push_back("LShLat");
     joints.name.push_back("LShYaw");
     joints.name.push_back("LElbj");
@@ -63,25 +63,25 @@ visual_utils(std::string e_frame, std::string base_frame, std::vector<std::strin
     joints.name.push_back("LWrj1");
     joints.name.push_back("LWrj2");
     
-    joints.name.push_back("WaistSag");
+    joints.name.push_back("WaistSag"); // 14
     joints.name.push_back("WaistLat");
     joints.name.push_back("WaistYaw");
 
     right_leg_index = joints.name.size();
 
-    joints.name.push_back("RHipLat");
+    joints.name.push_back("RHipLat"); // 17
     joints.name.push_back("RHipYaw");
     joints.name.push_back("RHipSag");
     joints.name.push_back("RKneeSag");
     joints.name.push_back("RAnkSag");
     joints.name.push_back("RAnkLat");
     
-    joints.name.push_back("NeckPitchj");
+    joints.name.push_back("NeckPitchj"); // 23
     joints.name.push_back("NeckYawj");
     
     left_leg_index = joints.name.size();
     
-    joints.name.push_back("LHipLat");
+    joints.name.push_back("LHipLat"); // 25
     joints.name.push_back("LHipYaw");
     joints.name.push_back("LHipSag");
     joints.name.push_back("LKneeSag");
@@ -166,7 +166,10 @@ void set_chain_joints( std::vector<double> chain_joints, std::string chain)
 
 void set_data(KDL::Frame base_T_ee, std::vector<double> chain_joints, std::string chain)
 {
-    if(chain=="com_left_foot") set_all_joints(chain_joints);
+    if(chain=="com_left_foot" || chain=="com_right_foot")
+    {
+        set_all_joints(chain_joints);
+    }
     else set_chain_joints(chain_joints,chain);
 
     set_chain_target(base_T_ee,chain);

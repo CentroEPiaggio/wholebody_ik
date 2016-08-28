@@ -22,6 +22,18 @@ int main(int argc, char** argv)
 {
     std::cout<<" -- This is a test to check the wholebody_ik library for the CoM --"<<std::endl;
 
+    bool right=false; //change this to perform the test for com wrt left or right com_left_foot
+
+    if(argc>1)
+    {
+        if(argc!=2)
+        {
+            std::cout<<"Please use 1 or none parameter!"<<std::endl;
+            return -1;
+        }
+        right = std::atoi(argv[1]);
+    }
+
     yarp::os::ResourceFinder rf;
     rf.setVerbose(true);
     rf.setDefaultConfigFile( "bigman_config.ini" ); 
@@ -52,35 +64,55 @@ int main(int argc, char** argv)
 
     ros::AsyncSpinner as(2);
 
+    std::string chain;
+    std::string f_frame;
+    double y_sign;
+
+    if(right)
+    {
+        chain = "com_right_foot";
+        f_frame = "r_sole";
+        y_sign = 1;
+    }
+    else
+    {
+        chain = "com_left_foot";
+        f_frame = "l_sole";
+        y_sign = -1;
+    }
+
     std::vector<std::string> chains;
-    chains.push_back("com_left_foot");
-    visual_utils vutils("e","l_sole",chains);
-    
-    initial_poses["com_left_foot"] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.059, -0.181, 1.137));
-    desired_poses["com_left_foot"] = initial_poses["com_left_foot"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0,0,0));
-    q_out["com_left_foot"] = yarp::sig::Vector(31,0.0);
-    q_init["com_left_foot"] = yarp::sig::Vector(q_out.at("com_left_foot").size(),0.0);
+    chains.push_back(chain);
+    visual_utils vutils("e",f_frame,chains);
+
+    initial_poses[chain] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.059, y_sign*0.181, 1.137));
+    desired_poses[chain] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.059, 0, 1.137));
+    q_out[chain] = yarp::sig::Vector(31,0.0);
+    q_init[chain] = yarp::sig::Vector(q_out.at(chain).size(),0.0);
 
     //initial joints
-    q_init.at("com_left_foot")[0] = 0.6;
-    q_init.at("com_left_foot")[1] = -0.2;
-    q_init.at("com_left_foot")[3] = -1.2;
-    q_init.at("com_left_foot")[5] = -0.6;
-    q_init.at("com_left_foot")[7] = 0.6;
-    q_init.at("com_left_foot")[8] = 0.2;
-    q_init.at("com_left_foot")[10] = -1.2;
-    q_init.at("com_left_foot")[12] = -0.6;
-    q_init.at("com_left_foot")[19] = -0.3;
-    q_init.at("com_left_foot")[20] = 0.6;
-    q_init.at("com_left_foot")[21] = -0.3;
-    q_init.at("com_left_foot")[27] = -0.3;
-    q_init.at("com_left_foot")[28] = 0.6;
-    q_init.at("com_left_foot")[29] = -0.3;
+    q_init.at(chain)[0] =  0.6;
+    q_init.at(chain)[1] = -0.2;
+    q_init.at(chain)[3] = -1.2;
+    q_init.at(chain)[5] = -0.6;
 
-    q_sense["com_left_foot"] = q_init.at("com_left_foot");
-    joints["com_left_foot"];
-    joints.at("com_left_foot").resize(q_out.at("com_left_foot").size());
-    traj_gens["com_left_foot"];
+    q_init.at(chain)[7]  =  0.6;
+    q_init.at(chain)[8]  =  0.2;
+    q_init.at(chain)[10] = -1.2;
+    q_init.at(chain)[12] = -0.6;
+
+    q_init.at(chain)[19] = -0.3;
+    q_init.at(chain)[20] =  0.6;
+    q_init.at(chain)[21] = -0.3;
+
+    q_init.at(chain)[27] = -0.3;
+    q_init.at(chain)[28] =  0.6;
+    q_init.at(chain)[29] = -0.3;
+
+    q_sense[chain] = q_init.at(chain);
+    joints[chain];
+    joints.at(chain).resize(q_out.at(chain).size());
+    traj_gens[chain];
 
     for(auto& joints_:joints)
     {
@@ -89,12 +121,11 @@ int main(int argc, char** argv)
             joints_.second.at(i) = q_sense.at(joints_.first)[i];
         }
 
-        std::cout<<"dim: "<<joints_.second.size()<<std::endl;
         vutils.set_data(desired_poses.at(joints_.first), joints_.second, joints_.first);
         traj_gens.at(joints_.first).line_initialize(traj_duration,initial_poses.at(joints_.first),desired_poses.at(joints_.first));
         IK.initialize(joints_.first,desired_poses.at(joints_.first),q_sense.at(joints_.first));
     }
-    
+
     ros::Time start = ros::Time::now();
     ros::Duration exp;
     KDL::Frame next_pose;
@@ -114,7 +145,7 @@ int main(int argc, char** argv)
 
             double cart_error = IK.cartToJnt(traj_gen.first,q_sense.at(traj_gen.first),q_out.at(traj_gen.first));
 
-            if(cart_error==-1) std::cout<<" -- error: "<<traj_gen.first<<std::endl;
+            if(cart_error==-1) std::cout<<" -- NOT CONVERGED: "<<traj_gen.first<<std::endl;
 
             for(int i=0;i<q_out.at(traj_gen.first).size();i++)
             {
