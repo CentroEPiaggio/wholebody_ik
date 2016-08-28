@@ -35,6 +35,11 @@
 #define HEAD_DOFS 2
 #define WB_DOFS 31
 
+#define CARTESIAN_DIM 6
+#define COM_DIM 3
+
+#define COM_FULL_DIM COM_DIM + 3*CARTESIAN_DIM
+
 using namespace yarp::math;
 
 chain_data::chain_data(std::string robot_name, std::string urdf_path, std::string srdf_path, std::string ee_link, std::string base_link, int dofs, std::string chain_name): idynutils(robot_name,urdf_path,srdf_path)
@@ -46,12 +51,12 @@ chain_data::chain_data(std::string robot_name, std::string urdf_path, std::strin
 
     idynutils.iDyn3_model.setAllConstraints(false); //to use joints limits
 
-    if(chain_name=="right_arm") { kin_chain = &idynutils.right_arm; jacobian = Eigen::Matrix<double,6,ARM_DOFS>();}
-    if(chain_name=="left_arm") {kin_chain = &idynutils.left_arm; jacobian = Eigen::Matrix<double,6,ARM_DOFS>();}
-    if(chain_name=="right_leg") {kin_chain = &idynutils.right_leg; jacobian = Eigen::Matrix<double,6,LEG_DOFS>();}
-    if(chain_name=="left_leg") {kin_chain = &idynutils.left_leg; jacobian = Eigen::Matrix<double,6,LEG_DOFS>();}
+    if(chain_name=="right_arm") { kin_chain = &idynutils.right_arm; jacobian = Eigen::Matrix<double,CARTESIAN_DIM,ARM_DOFS>();}
+    if(chain_name=="left_arm") {kin_chain = &idynutils.left_arm; jacobian = Eigen::Matrix<double,CARTESIAN_DIM,ARM_DOFS>();}
+    if(chain_name=="right_leg") {kin_chain = &idynutils.right_leg; jacobian = Eigen::Matrix<double,CARTESIAN_DIM,LEG_DOFS>();}
+    if(chain_name=="left_leg") {kin_chain = &idynutils.left_leg; jacobian = Eigen::Matrix<double,CARTESIAN_DIM,LEG_DOFS>();}
 
-    if(chain_name=="com_left_foot" || chain_name=="com_right_foot") {jacobian = Eigen::Matrix<double,3,WB_DOFS>();}
+    if(chain_name=="com_left_foot" || chain_name=="com_right_foot") {jacobian = Eigen::Matrix<double,COM_DIM,WB_DOFS>();}
 
     this->ee_link = ee_link;
     this->base_link = base_link;
@@ -120,8 +125,8 @@ bool wholebody_ik::initialize(std::string chain, KDL::Frame cartesian_pose, cons
 
     int dofs = data->get_dofs();
     int dim;
-    if(chain=="com_left_foot" || chain=="com_right_foot") dim=3;
-    else dim=6;
+    if(chain=="com_left_foot" || chain=="com_right_foot") dim=COM_DIM;
+    else dim=CARTESIAN_DIM;
     
 
     data->car_err = 9999.0;
@@ -255,11 +260,11 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
     Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > ee_jac(b_J_be.data(),b_J_be.rows(),b_J_be.cols());
 
     if(data->get_name()=="right_arm" || data->get_name()=="left_arm")
-        data->jacobian.block<6,ARM_DOFS>(0,0) = ee_jac.block<6,ARM_DOFS>(0,compute_cols_to_remove(chain));
+        data->jacobian.block<CARTESIAN_DIM,ARM_DOFS>(0,0) = ee_jac.block<CARTESIAN_DIM,ARM_DOFS>(0,compute_cols_to_remove(chain));
     if(data->get_name()=="right_leg" || data->get_name()=="left_leg")
-        data->jacobian.block<6,LEG_DOFS>(0,0) = ee_jac.block<6,LEG_DOFS>(0,compute_cols_to_remove(chain));
+        data->jacobian.block<CARTESIAN_DIM,LEG_DOFS>(0,0) = ee_jac.block<CARTESIAN_DIM,LEG_DOFS>(0,compute_cols_to_remove(chain));
     if(data->get_name()=="com_left_foot" || data->get_name()=="com_right_foot")
-        data->jacobian.block<3,WB_DOFS>(0,0) = ee_jac.block<3,WB_DOFS>(0,compute_cols_to_remove(chain));
+        data->jacobian.block<COM_DIM,WB_DOFS>(0,0) = ee_jac.block<COM_DIM,WB_DOFS>(0,compute_cols_to_remove(chain));
 
     if(!com)
     {
@@ -313,7 +318,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
                 In = Eigen::Matrix<double,ARM_DOFS,ARM_DOFS>();
                 des_q = Eigen::Matrix<double,ARM_DOFS,1>();
                 input_q = Eigen::Matrix<double,ARM_DOFS,1>();
-                pinvJ = Eigen::Matrix<double,ARM_DOFS,6>();
+                pinvJ = Eigen::Matrix<double,ARM_DOFS,CARTESIAN_DIM>();
                 pinvJ = math_utilities::pseudoInverseQR_76(data->jacobian);
             }
             if(dofs==LEG_DOFS)
@@ -321,7 +326,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
                 In = Eigen::Matrix<double,LEG_DOFS,LEG_DOFS>();
                 des_q = Eigen::Matrix<double,LEG_DOFS,1>();
                 input_q = Eigen::Matrix<double,LEG_DOFS,1>();
-                pinvJ = Eigen::Matrix<double,LEG_DOFS,6>();
+                pinvJ = Eigen::Matrix<double,LEG_DOFS,CARTESIAN_DIM>();
                 pinvJ = math_utilities::pseudoInverseQR_66(data->jacobian);
             }
 
@@ -370,7 +375,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
             In = Eigen::Matrix<double,WB_DOFS,WB_DOFS>();
             des_q = Eigen::Matrix<double,WB_DOFS,1>();
             input_q = Eigen::Matrix<double,WB_DOFS,1>();
-            pinvJ = Eigen::Matrix<double,WB_DOFS,3>();
+            pinvJ = Eigen::Matrix<double,WB_DOFS,COM_DIM>();
             pinvJ = math_utilities::pseudoInverseQR_313(data->jacobian);
 
             math_utilities::vectorYARPToEigen(q_input,input_q);
