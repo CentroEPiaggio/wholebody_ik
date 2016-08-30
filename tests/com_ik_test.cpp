@@ -86,30 +86,43 @@ int main(int argc, char** argv)
     visual_utils vutils("e",f_frame,chains);
 
     initial_poses[chain] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.059, y_sign*0.181, 1.137));
-    desired_poses[chain] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.059, 0, 1.137));
+    desired_poses[chain] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.059, y_sign*0.181, 1.09));
     q_out[chain] = yarp::sig::Vector(31,0.0);
     q_init[chain] = yarp::sig::Vector(q_out.at(chain).size(),0.0);
 
+    iDynUtils idynutils(robot,urdf,srdf);
+
     //initial joints
-    q_init.at(chain)[0] =  0.6;
-    q_init.at(chain)[1] = -0.2;
-    q_init.at(chain)[3] = -1.2;
-    q_init.at(chain)[5] = -0.6;
+    yarp::sig::Vector q_left_arm(7,0.0);
+    q_left_arm[0]  = 0.6;
+    q_left_arm[1]  = 0.2;
+    q_left_arm[3]  = -1.2;
+    q_left_arm[5]  = -0.6;
+    yarp::sig::Vector q_right_arm(7,0.0);
+    q_right_arm[0] =  0.6;
+    q_right_arm[1] = -0.2;
+    q_right_arm[3] = -1.2;
+    q_right_arm[5] = -0.6;
+    yarp::sig::Vector q_left_leg(6,0.0);
+    q_left_leg[2]  = -0.3;
+    q_left_leg[3]  =  0.6;
+    q_left_leg[4]  = -0.3;
+    yarp::sig::Vector q_right_leg(6,0.0);
+    q_right_leg[2] = -0.3;
+    q_right_leg[3] =  0.6;
+    q_right_leg[4] = -0.3;
+    yarp::sig::Vector q_torso(3,0.0);
+    yarp::sig::Vector q_head(2,0.0);
 
-    q_init.at(chain)[7]  =  0.6;
-    q_init.at(chain)[8]  =  0.2;
-    q_init.at(chain)[10] = -1.2;
-    q_init.at(chain)[12] = -0.6;
+    idynutils.fromRobotToIDyn(q_left_arm,q_init.at(chain),idynutils.left_arm);
+    idynutils.fromRobotToIDyn(q_right_arm,q_init.at(chain),idynutils.right_arm);
+    idynutils.fromRobotToIDyn(q_left_leg,q_init.at(chain),idynutils.left_leg);
+    idynutils.fromRobotToIDyn(q_right_leg,q_init.at(chain),idynutils.right_leg);
+    idynutils.fromRobotToIDyn(q_torso,q_init.at(chain),idynutils.torso);
+    idynutils.fromRobotToIDyn(q_head,q_init.at(chain),idynutils.head);
 
-    q_init.at(chain)[19] = -0.3;
-    q_init.at(chain)[20] =  0.6;
-    q_init.at(chain)[21] = -0.3;
-
-    q_init.at(chain)[27] = -0.3;
-    q_init.at(chain)[28] =  0.6;
-    q_init.at(chain)[29] = -0.3;
-
-    q_sense[chain] = q_init.at(chain);
+    q_sense[chain] = yarp::sig::Vector(q_init.at(chain).size(),0.0);
+    q_sense.at(chain) = q_init.at(chain);
     joints[chain];
     joints.at(chain).resize(q_out.at(chain).size());
     traj_gens[chain];
@@ -135,6 +148,8 @@ int main(int argc, char** argv)
 
     while(ros::ok())
     {
+        std::cout<<"["<<old_t<<"]"<<std::endl;
+
         old_t = secs;
         secs = exp.toSec() + ((double)exp.toNSec()) / 1000000000.0;
 

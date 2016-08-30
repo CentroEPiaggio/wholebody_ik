@@ -56,7 +56,7 @@ chain_data::chain_data(std::string robot_name, std::string urdf_path, std::strin
     if(chain_name=="right_leg") {kin_chain = &idynutils.right_leg; jacobian = Eigen::Matrix<double,CARTESIAN_DIM,LEG_DOFS>();}
     if(chain_name=="left_leg") {kin_chain = &idynutils.left_leg; jacobian = Eigen::Matrix<double,CARTESIAN_DIM,LEG_DOFS>();}
 
-    if(chain_name=="com_left_foot" || chain_name=="com_right_foot") {jacobian = Eigen::Matrix<double,COM_DIM,WB_DOFS>();}
+    if(chain_name=="com_left_foot" || chain_name=="com_right_foot") {com = true; jacobian = Eigen::Matrix<double,COM_FULL_DIM,WB_DOFS>();}
 
     this->ee_link = ee_link;
     this->base_link = base_link;
@@ -68,13 +68,13 @@ chain_data::chain_data(std::string robot_name, std::string urdf_path, std::strin
 
 wholebody_ik::wholebody_ik(std::string robot_name,std::string urdf_path, std::string srdf_path, int period_ms): d_t(period_ms/1000.0), robot("wb_ik", robot_name, urdf_path, srdf_path)
 {    
-    chains["right_arm"] = new chain_data(robot_name,urdf_path,srdf_path,"RSoftHand","Waist", ARM_DOFS, "right_arm");
-    chains["left_arm"] = new chain_data(robot_name,urdf_path,srdf_path,"LSoftHand","Waist", ARM_DOFS, "left_arm");
-    chains["right_leg"] = new chain_data(robot_name,urdf_path,srdf_path,"r_sole","Waist", LEG_DOFS, "right_leg");
-    chains["left_leg"] = new chain_data(robot_name,urdf_path,srdf_path,"l_sole","Waist", LEG_DOFS, "left_leg");
+    chains["right_arm"]      = new chain_data(robot_name,urdf_path,srdf_path,"RSoftHand","Waist", ARM_DOFS, "right_arm");
+    chains["left_arm"]       = new chain_data(robot_name,urdf_path,srdf_path,"LSoftHand","Waist", ARM_DOFS, "left_arm");
+    chains["right_leg"]      = new chain_data(robot_name,urdf_path,srdf_path,"r_sole"   ,"Waist", LEG_DOFS, "right_leg");
+    chains["left_leg"]       = new chain_data(robot_name,urdf_path,srdf_path,"l_sole"   ,"Waist", LEG_DOFS, "left_leg");
 
-    chains["com_left_foot"] = new chain_data(robot_name,urdf_path,srdf_path,"CoM","l_sole", WB_DOFS, "com_left_foot");
-    chains["com_right_foot"] = new chain_data(robot_name,urdf_path,srdf_path,"CoM","r_sole", WB_DOFS, "com_right_foot");
+    chains["com_left_foot"]  = new chain_data(robot_name,urdf_path,srdf_path,"CoM"      ,"l_sole", WB_DOFS, "com_left_foot");
+    chains["com_right_foot"] = new chain_data(robot_name,urdf_path,srdf_path,"CoM"      ,"r_sole", WB_DOFS, "com_right_foot");
 }
 
 void wholebody_ik::print_eigen_matrix(const Eigen::MatrixXd& data)
@@ -87,7 +87,6 @@ void wholebody_ik::print_eigen_matrix(const Eigen::MatrixXd& data)
         }
         std::cout<<std::endl;
     }
-
 }
 
 void wholebody_ik::print_YARP_matrix(const yarp::sig::Matrix& data)
@@ -107,6 +106,27 @@ void wholebody_ik::warn_not_initialized(std::string str)
     std::cout<<" --------------- WARNING ARMS IK NOT PROPERLY INITIALIZED FOR '"<< str <<"'--------------- "<<std::endl;
 }
 
+void wholebody_ik::update_limbs_poses(std::string chain)
+{
+    if(!chains.at(chain)->com) return;
+
+    std::string foot_frame = (chain=="com_left_foot")?"r_sole":"l_sole";
+    std::string l_hand_frame = "LSoftHand";
+    std::string r_hand_frame = "RSoftHand";
+
+    int foot_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(foot_frame);
+    int l_hand_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(l_hand_frame);
+    int r_hand_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(r_hand_frame);
+
+    math_utilities::FrameYARPToKDL(chains.at(chain)->idynutils.iDyn3_model.getPosition(foot_index),limbs_poses[foot_frame]);
+    math_utilities::FrameYARPToKDL(chains.at(chain)->idynutils.iDyn3_model.getPosition(l_hand_index),limbs_poses[l_hand_frame]);
+    math_utilities::FrameYARPToKDL(chains.at(chain)->idynutils.iDyn3_model.getPosition(r_hand_index),limbs_poses[r_hand_frame]);
+
+//     std::cout<<foot_frame<<std::endl<<limbs_poses[foot_frame]<<std::endl;
+//     std::cout<<l_hand_frame<<std::endl<<limbs_poses[l_hand_frame]<<std::endl;
+//     std::cout<<r_hand_frame<<std::endl<<limbs_poses[r_hand_frame]<<std::endl;
+}
+
 bool wholebody_ik::initialize(std::string chain, KDL::Frame cartesian_pose, const yarp::sig::Vector& q_input)
 {
     if(!chains.count(chain))
@@ -123,17 +143,22 @@ bool wholebody_ik::initialize(std::string chain, KDL::Frame cartesian_pose, cons
         return false;
     }
 
+    yarp::sig::Vector q_all(data->idynutils.getJointNames().size(),0.0);
+    if(!data->com) data->idynutils.fromRobotToIDyn(q_input,q_all,*data->kin_chain);
+    else q_all=q_input;
+    data->idynutils.updateiDyn3Model(q_all,false);
+
     int dofs = data->get_dofs();
     int dim;
-    if(chain=="com_left_foot" || chain=="com_right_foot") dim=COM_DIM;
+    if(data->com) dim=COM_FULL_DIM;
     else dim=CARTESIAN_DIM;
-    
 
     data->car_err = 9999.0;
     data->first_step = true;
 
     data->ee_current = KDL::Frame::Identity();
     data->ee_desired = cartesian_pose;
+    update_limbs_poses(chain);
 
     data->jacobian.setZero();
     
@@ -142,17 +167,17 @@ bool wholebody_ik::initialize(std::string chain, KDL::Frame cartesian_pose, cons
     std::cout<<"=---------------------------"<<std::endl;
     std::cout<<" WholeBody IK Library initialized. Created a "<<dim<<"x" <<dofs<<" Jacobian ("<<chain<<")"<<std::endl;
     std::cout<<"=---------------------------"<<std::endl;
-    
+
     return true;
 }
-
-
 
 void wholebody_ik::set_desired_ee_pose(std::string chain, KDL::Frame cartesian_pose)
 {
     if(!chains.at(chain)->initialized) {warn_not_initialized(chain); return;}
 
     chains.at(chain)->ee_desired=cartesian_pose;
+
+    update_limbs_poses(chain);
 }
 
 bool wholebody_ik::cartesian_action_completed(std::string chain, double precision)
@@ -167,7 +192,7 @@ double wholebody_ik::cartToJnt(std::string chain, const yarp::sig::Vector& q_inp
 {
     if(!chains.at(chain)->initialized) {warn_not_initialized(chain); return -1;}
 
-    if(chain=="com_left_foot" || chain=="com_right_foot") precision=0.01;
+//     if(chain=="com_left_foot" || chain=="com_right_foot") precision=0.01;
 
     q_out = q_input;
     unsigned int i;
@@ -205,7 +230,6 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 {
     chain_data *data = chains.at(chain);
     int dofs = data->get_dofs();
-    bool com = (chain=="com_left_foot" || chain=="com_right_foot");
 
     if(!data->initialized) {warn_not_initialized(chain); return yarp::sig::Vector();}
 
@@ -221,7 +245,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
     Eigen::MatrixXd d_q;
 
     yarp::sig::Vector q_all(data->idynutils.getJointNames().size(),0.0);
-    if(!com) data->idynutils.fromRobotToIDyn(q_input,q_all,*data->kin_chain);
+    if(!chains.at(chain)->com) data->idynutils.fromRobotToIDyn(q_input,q_all,*data->kin_chain);
     else q_all=q_input;
     data->idynutils.updateiDyn3Model(q_all,false);
 
@@ -232,13 +256,57 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
     // ------ transforming the Jacobian in {B}
     //
     // base_link = {B} , ee_link = {E}
-    if(com)
+    if(chains.at(chain)->com)
     {
-        if(!data->idynutils.iDyn3_model.getCOMJacobian(b_J_be))
+        Eigen::Matrix<double,COM_FULL_DIM,WB_DOFS> jacob;
+
+        yarp::sig::Matrix COM_J;
+        yarp::sig::Matrix foot_J;
+        yarp::sig::Matrix l_hand_J;
+        yarp::sig::Matrix r_hand_J;
+
+        std::string foot_frame = (chain=="com_left_foot")?"r_sole":"l_sole";
+        std::string l_hand_frame = "LSoftHand";
+        std::string r_hand_frame = "RSoftHand";
+
+        int foot_index = data->idynutils.iDyn3_model.getLinkIndex(foot_frame);
+        int l_hand_index = data->idynutils.iDyn3_model.getLinkIndex(l_hand_frame);
+        int r_hand_index = data->idynutils.iDyn3_model.getLinkIndex(r_hand_frame);
+
+        if(!data->idynutils.iDyn3_model.getCOMJacobian(COM_J))
         {
             std::cout<<" !! ERROR : UNABLE TO GET COM JACOBIAN !! "<<std::endl;
             return out;
         }
+        if(!data->idynutils.iDyn3_model.getJacobian(foot_index,foot_J))
+        {
+            std::cout<<" !! ERROR : UNABLE TO GET JACOBIAN - "<<foot_frame<<std::endl;
+            return out;
+        }
+        if(!data->idynutils.iDyn3_model.getJacobian(l_hand_index,l_hand_J))
+        {
+            std::cout<<" !! ERROR : UNABLE TO GET JACOBIAN - "<<l_hand_frame<<std::endl;
+            return out;
+        }
+        if(!data->idynutils.iDyn3_model.getJacobian(r_hand_index,r_hand_J))
+        {
+            std::cout<<" !! ERROR : UNABLE TO GET JACOBIAN - "<<r_hand_frame<<std::endl;
+            return out;
+        }
+
+        Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > eigen_COM_J(COM_J.data(),COM_J.rows(),COM_J.cols());
+        Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > eigen_foot_J(foot_J.data(),foot_J.rows(),foot_J.cols());
+        Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > eigen_l_hand_J(l_hand_J.data(),l_hand_J.rows(),l_hand_J.cols());
+        Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > eigen_r_hand_J(r_hand_J.data(),r_hand_J.rows(),r_hand_J.cols());
+
+        jacob.block<COM_DIM,WB_DOFS>(0,0) = eigen_COM_J;
+        jacob.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM,0) = eigen_foot_J;
+        jacob.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM+CARTESIAN_DIM,0) = eigen_l_hand_J;
+        jacob.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM+2*CARTESIAN_DIM,0) = eigen_r_hand_J;
+
+        b_J_be.resize(COM_FULL_DIM,WB_DOFS);
+
+        math_utilities::matrixEigenToYARP(jacob,b_J_be);
     }
     else
     {
@@ -263,10 +331,11 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
         data->jacobian.block<CARTESIAN_DIM,ARM_DOFS>(0,0) = ee_jac.block<CARTESIAN_DIM,ARM_DOFS>(0,compute_cols_to_remove(chain));
     if(data->get_name()=="right_leg" || data->get_name()=="left_leg")
         data->jacobian.block<CARTESIAN_DIM,LEG_DOFS>(0,0) = ee_jac.block<CARTESIAN_DIM,LEG_DOFS>(0,compute_cols_to_remove(chain));
-    if(data->get_name()=="com_left_foot" || data->get_name()=="com_right_foot")
-        data->jacobian.block<COM_DIM,WB_DOFS>(0,0) = ee_jac.block<COM_DIM,WB_DOFS>(0,compute_cols_to_remove(chain));
+    if(chains.at(chain)->com)
+        data->jacobian.block<COM_FULL_DIM,WB_DOFS>(0,0) = ee_jac.block<COM_FULL_DIM,WB_DOFS>(0,0);
 
-    if(!com)
+
+    if(!chains.at(chain)->com)
     {
         //
         // ------ transforming the ee position in {B}
@@ -346,20 +415,54 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
     }
     else // -------------------- COM ---------------------------
     {
+        std::string foot_frame = (chain=="com_left_foot")?"r_sole":"l_sole";
+        std::string l_hand_frame = "LSoftHand";
+        std::string r_hand_frame = "RSoftHand";
+
+        int foot_index = data->idynutils.iDyn3_model.getLinkIndex(foot_frame);
+        int l_hand_index = data->idynutils.iDyn3_model.getLinkIndex(l_hand_frame);
+        int r_hand_index = data->idynutils.iDyn3_model.getLinkIndex(r_hand_frame);
+
         KDL::Vector com_pos;
         math_utilities::vectorYARPToKDL(data->idynutils.iDyn3_model.getCOM(),com_pos);
         data->ee_current.M = KDL::Rotation::Identity();
         data->ee_current.p = com_pos;
 
-        Eigen::Matrix<double,3,1> b_v_ee_desired;
-        Eigen::Vector3d temp;
-
         //
         // ------ computing the desired velocity b_v_ee_desired
         //
-        math_utilities::vectorKDLToEigen((data->ee_desired.p - data->ee_current.p), temp);
-        b_v_ee_desired.block<3,1>(0,0) = temp;
+        Eigen::Matrix<double,COM_FULL_DIM,1> b_v_ee_desired;
+        Eigen::Vector3d temp;
+        KDL::Frame temp_current_ee;
+        yarp::sig::Matrix ee_d(3,3);
+        yarp::sig::Matrix ee_c(3,3);
 
+        std::vector<int> ee_index;
+        ee_index.push_back(foot_index);
+        ee_index.push_back(l_hand_index);
+        ee_index.push_back(r_hand_index);
+        std::vector<std::string> ee_names;
+        ee_names.push_back(foot_frame);
+        ee_names.push_back(l_hand_frame);
+        ee_names.push_back(r_hand_frame);
+
+        math_utilities::vectorKDLToEigen((data->ee_desired.p - data->ee_current.p), temp);
+        b_v_ee_desired.block<COM_DIM,1>(0,0) = temp;
+
+        for(int limb_num=0;limb_num<3;limb_num++)
+        {
+            math_utilities::FrameYARPToKDL(data->idynutils.iDyn3_model.getPosition(ee_index.at(limb_num)),temp_current_ee);
+
+            math_utilities::vectorKDLToEigen((limbs_poses.at(ee_names.at(limb_num)).p - temp_current_ee.p), temp);
+            b_v_ee_desired.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num,0) = temp;
+
+            math_utilities::rotationKDLToYarp(limbs_poses.at(ee_names.at(limb_num)).M,ee_d);
+            math_utilities::rotationKDLToYarp(temp_current_ee.M,ee_c);
+            Eo = locoman::utils::Orient_Error(ee_d, ee_c);
+            math_utilities::vectorYARPToEigen(Eo,temp);
+            b_v_ee_desired.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num+3,0)=temp;
+        }
+        
         if(!data->first_step) data->car_err=b_v_ee_desired.norm();
         else data->first_step = false;
 
@@ -368,19 +471,18 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
         if (!cartesian_action_completed(chain,precision))
         {
             Eigen::MatrixXd pinvJ;
-            Eigen::MatrixXd In;
-            Eigen::MatrixXd des_q;
             Eigen::MatrixXd input_q;
 
-            In = Eigen::Matrix<double,WB_DOFS,WB_DOFS>();
-            des_q = Eigen::Matrix<double,WB_DOFS,1>();
             input_q = Eigen::Matrix<double,WB_DOFS,1>();
-            pinvJ = Eigen::Matrix<double,WB_DOFS,COM_DIM>();
-            pinvJ = math_utilities::pseudoInverseQR_313(data->jacobian);
+            pinvJ = Eigen::Matrix<double,WB_DOFS,COM_FULL_DIM>();
+            pinvJ = math_utilities::pseudoInverseQR_3121(data->jacobian);
 
             math_utilities::vectorYARPToEigen(q_input,input_q);
 
             d_q = pinvJ* b_v_ee_desired/d_t;
+
+//             print_eigen_matrix(b_v_ee_desired);
+//             abort();
         }
         else
             d_q.setZero();

@@ -43,50 +43,50 @@ visual_utils(std::string e_frame, std::string base_frame, std::vector<std::strin
 
     joints_pub = nh.advertise<sensor_msgs::JointState>("joint_states",1);
 
-    right_arm_index = joints.name.size();
+    left_leg_index = joints.name.size();
 
-    joints.name.push_back("RShSag"); // 0
-    joints.name.push_back("RShLat");
-    joints.name.push_back("RShYaw");
-    joints.name.push_back("RElbj");
-    joints.name.push_back("RForearmPlate");
-    joints.name.push_back("RWrj1");
-    joints.name.push_back("RWrj2");
+    joints.name.push_back("LHipLat");
+    joints.name.push_back("LHipYaw");
+    joints.name.push_back("LHipSag");
+    joints.name.push_back("LKneeSag");
+    joints.name.push_back("LAnkSag");
+    joints.name.push_back("LAnkLat");
 
+    right_leg_index = joints.name.size();
+
+    joints.name.push_back("RHipLat");
+    joints.name.push_back("RHipYaw");
+    joints.name.push_back("RHipSag");
+    joints.name.push_back("RKneeSag");
+    joints.name.push_back("RAnkSag");
+    joints.name.push_back("RAnkLat");
+
+    joints.name.push_back("WaistSag");
+    joints.name.push_back("WaistLat");
+    joints.name.push_back("WaistYaw");
+    
     left_arm_index = joints.name.size();
 
-    joints.name.push_back("LShSag"); // 7
+    joints.name.push_back("LShSag");
     joints.name.push_back("LShLat");
     joints.name.push_back("LShYaw");
     joints.name.push_back("LElbj");
     joints.name.push_back("LForearmPlate");
     joints.name.push_back("LWrj1");
     joints.name.push_back("LWrj2");
-    
-    joints.name.push_back("WaistSag"); // 14
-    joints.name.push_back("WaistLat");
-    joints.name.push_back("WaistYaw");
 
-    right_leg_index = joints.name.size();
-
-    joints.name.push_back("RHipLat"); // 17
-    joints.name.push_back("RHipYaw");
-    joints.name.push_back("RHipSag");
-    joints.name.push_back("RKneeSag");
-    joints.name.push_back("RAnkSag");
-    joints.name.push_back("RAnkLat");
-    
-    joints.name.push_back("NeckPitchj"); // 23
+    joints.name.push_back("NeckPitchj");
     joints.name.push_back("NeckYawj");
-    
-    left_leg_index = joints.name.size();
-    
-    joints.name.push_back("LHipLat"); // 25
-    joints.name.push_back("LHipYaw");
-    joints.name.push_back("LHipSag");
-    joints.name.push_back("LKneeSag");
-    joints.name.push_back("LAnkSag");
-    joints.name.push_back("LAnkLat");
+
+    right_arm_index = joints.name.size();
+
+    joints.name.push_back("RShSag");
+    joints.name.push_back("RShLat");
+    joints.name.push_back("RShYaw");
+    joints.name.push_back("RElbj");
+    joints.name.push_back("RForearmPlate");
+    joints.name.push_back("RWrj1");
+    joints.name.push_back("RWrj2");
 
     for(auto item:joints.name) joints.position.push_back(0);
 

@@ -137,6 +137,17 @@ static Eigen::Matrix<double,31,3> pseudoInverseQR_313(const Eigen::Matrix<double
   return Q.leftCols(Rtot.topRows(Rtot.cols()).cols())*Rtot.topRows(Rtot.cols()).transpose().inverse();
 }
 
+static Eigen::Matrix<double,31,21> pseudoInverseQR_3121(const Eigen::Matrix<double,21,31> &a, double epsilon = std::numeric_limits<double>::epsilon())
+{
+  Eigen::HouseholderQR<Eigen::Matrix<double,31,21>> qr(a.transpose());
+
+  Eigen::Matrix<double,31,21> Rtot = qr.matrixQR().template triangularView<Eigen::Upper>();
+
+  Eigen::Matrix<double,31,31> Q = qr.householderQ();
+
+  return Q.leftCols(Rtot.topRows(Rtot.cols()).cols())*Rtot.topRows(Rtot.cols()).transpose().inverse();
+}
+
 static inline void vectorKDLToEigen(const KDL::Vector& k, Eigen::Vector3d& e)
 {
   e[0]=k.x();
@@ -191,9 +202,9 @@ static inline void matrixYARPToEigen(const yarp::sig::Matrix& in, Eigen::MatrixX
 
 static inline void matrixEigenToYARP(const Eigen::MatrixXd& in, yarp::sig::Matrix& out)
 {
-    for(int r=0;r<3;r++)
-        for(int c=0;c<3;c++)
-            out(r,c)=in.data()[r*3+c];
+    for(int r=0;r<in.rows();r++)
+        for(int c=0;c<in.cols();c++)
+            out(r,c)=in.data()[r*in.cols()+c];
 }
 
 static inline void rotationKDLToYarp(const KDL::Rotation& in, yarp::sig::Matrix& out)

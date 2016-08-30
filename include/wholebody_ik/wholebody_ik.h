@@ -22,8 +22,6 @@
 #include <idynutils/idynutils.h>
 #include <idynutils/RobotUtils.h>
 
-#define DOFS 7
-
 class chain_data
 {
 public:
@@ -51,6 +49,7 @@ public:
     Eigen::MatrixXd jacobian;
 
     bool first_step;
+    bool com=false;
 
     inline std::string get_ee_link(){return ee_link;}
     inline std::string get_base_link(){return base_link;}
@@ -159,6 +158,13 @@ private:
      * \brief a utility just for switching between single chains and wholebody joints vectors
      */
     RobotUtils robot;
+
+    /**
+     * \brief vector of cartesian poses of end-effectors and the beginning of a CoM movement
+     */
+    std::map<std::string, KDL::Frame> limbs_poses;
+
+    void update_limbs_poses(std::string chain);
 };
 
 #endif //WHOLEBODY_IK_H
