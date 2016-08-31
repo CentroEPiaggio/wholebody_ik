@@ -21,11 +21,7 @@
 #include <kdl/frames_io.hpp>
 #include <kdl/jacobian.hpp>
 
-#include <locoman/utils/screws.hpp>
-#include <locoman/utils/kinematics.hpp>
-#include <locoman/utils/kinetostatics.hpp>
-#include <locoman/utils/locoman_utils.hpp>
-#include <locoman/utils/algebra.hpp>
+#include <locoman/utils/declarations.h>
 
 #include "utils.cpp" // NOTE: to remove
 
