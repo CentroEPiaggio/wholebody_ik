@@ -30,6 +30,7 @@
 #define TORSO_DOFS 3
 #define HEAD_DOFS 2
 #define WB_DOFS 31
+#define FLOATING_BASE_DOFS 6
 
 #define CARTESIAN_DIM 6
 #define COM_DIM 3
@@ -215,7 +216,7 @@ int compute_cols_to_remove(std::string chain)
     if(chain=="right_leg") cols_to_remove = LEG_DOFS;
     if(chain=="left_arm") cols_to_remove = 2*LEG_DOFS + TORSO_DOFS ;
     if(chain=="right_arm") cols_to_remove = 2*LEG_DOFS + TORSO_DOFS + ARM_DOFS + HEAD_DOFS;
-    if(chain=="com_left_foot" || chain=="com_right_foot") cols_to_remove = 6; //floating base
+    if(chain=="com_left_foot" || chain=="com_right_foot") cols_to_remove = FLOATING_BASE_DOFS;
 
     return cols_to_remove;
 }
@@ -252,7 +253,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
     // base_link = {B} , ee_link = {E}
     if(chains.at(chain)->com)
     {
-        Eigen::Matrix<double,COM_FULL_DIM,WB_DOFS> jacob;
+        Eigen::Matrix<double,COM_FULL_DIM,WB_DOFS+FLOATING_BASE_DOFS> jacob;
 
         yarp::sig::Matrix COM_J;
         yarp::sig::Matrix foot_J;
@@ -293,12 +294,12 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
         Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > eigen_l_hand_J(l_hand_J.data(),l_hand_J.rows(),l_hand_J.cols());
         Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > eigen_r_hand_J(r_hand_J.data(),r_hand_J.rows(),r_hand_J.cols());
 
-        jacob.block<COM_DIM,WB_DOFS>(0,0) = eigen_COM_J;
-        jacob.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM,0) = eigen_foot_J;
-        jacob.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM+CARTESIAN_DIM,0) = eigen_l_hand_J;
-        jacob.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM+2*CARTESIAN_DIM,0) = eigen_r_hand_J;
+        jacob.block<COM_DIM,WB_DOFS+FLOATING_BASE_DOFS>(0,0) = eigen_COM_J.block<COM_DIM,WB_DOFS+FLOATING_BASE_DOFS>(0,0); //removing orientation part from COM jacobian
+        jacob.block<CARTESIAN_DIM,WB_DOFS+FLOATING_BASE_DOFS>(COM_DIM,0) = eigen_foot_J;
+        jacob.block<CARTESIAN_DIM,WB_DOFS+FLOATING_BASE_DOFS>(COM_DIM+CARTESIAN_DIM,0) = eigen_l_hand_J;
+        jacob.block<CARTESIAN_DIM,WB_DOFS+FLOATING_BASE_DOFS>(COM_DIM+2*CARTESIAN_DIM,0) = eigen_r_hand_J;
 
-        b_J_be.resize(COM_FULL_DIM,WB_DOFS);
+        b_J_be.resize(COM_FULL_DIM,WB_DOFS+FLOATING_BASE_DOFS);
 
         math_utilities::matrixEigenToYARP(jacob,b_J_be);
     }
@@ -326,7 +327,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
     if(data->get_name()=="right_leg" || data->get_name()=="left_leg")
         data->jacobian.block<CARTESIAN_DIM,LEG_DOFS>(0,0) = ee_jac.block<CARTESIAN_DIM,LEG_DOFS>(0,compute_cols_to_remove(chain));
     if(chains.at(chain)->com)
-        data->jacobian.block<COM_FULL_DIM,WB_DOFS>(0,0) = ee_jac.block<COM_FULL_DIM,WB_DOFS>(0,0);
+        data->jacobian.block<COM_FULL_DIM,WB_DOFS>(0,0) = ee_jac.block<COM_FULL_DIM,WB_DOFS>(0,compute_cols_to_remove(chain));
 
 
     if(!chains.at(chain)->com)
