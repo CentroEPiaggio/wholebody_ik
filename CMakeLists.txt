@@ -52,7 +52,7 @@ ycm_default_dirs(${VARS_PREFIX})
 set(ROS_LIB_FOLDER $ENV{ROS_LIB_FOLDER} CACHE STRING "ros lib folder")
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}")
-
+include(cotire)
 
 FIND_PACKAGE(YARP REQUIRED)
 FIND_PACKAGE(idynutils REQUIRED)
@@ -93,6 +93,8 @@ TARGET_LINK_LIBRARIES(wholebody_ik_lib ${EIGEN3_LIBRARIES}
                                     ${idynutils_LIBRARIES}
                                     ${GYM_LIBRARIES}
                                     ${locoman_utils_LIBRARIES})
+
+cotire(wholebody_ik_lib)                                    
 
 set_property(GLOBAL APPEND PROPERTY ${VARS_PREFIX}_TARGETS wholebody_ik_lib)        
 
