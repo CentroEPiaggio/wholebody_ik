@@ -66,7 +66,7 @@ chain_data::chain_data(std::string robot_name, std::string urdf_path, std::strin
     initialized = false;
 }
 
-wholebody_ik::wholebody_ik(std::string robot_name,std::string urdf_path, std::string srdf_path, int period_ms): d_t(period_ms/1000.0), robot("wb_ik", robot_name, urdf_path, srdf_path)
+wholebody_ik::wholebody_ik(std::string robot_name,std::string urdf_path, std::string srdf_path, int period_ms): d_t(period_ms/1000.0)
 {    
     chains["right_arm"]      = new chain_data(robot_name,urdf_path,srdf_path,"RSoftHand","Waist", ARM_DOFS, "right_arm");
     chains["left_arm"]       = new chain_data(robot_name,urdf_path,srdf_path,"LSoftHand","Waist", ARM_DOFS, "left_arm");
@@ -191,8 +191,6 @@ bool wholebody_ik::cartesian_action_completed(std::string chain, double precisio
 double wholebody_ik::cartToJnt(std::string chain, const yarp::sig::Vector& q_input, yarp::sig::Vector& q_out,double precision)
 {
     if(!chains.at(chain)->initialized) {warn_not_initialized(chain); return -1;}
-
-//     if(chain=="com_left_foot" || chain=="com_right_foot") precision=0.01;
 
     q_out = q_input;
     unsigned int i;

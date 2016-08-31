@@ -155,11 +155,6 @@ private:
     double d_t=1;
 
     /**
-     * \brief a utility just for switching between single chains and wholebody joints vectors
-     */
-    RobotUtils robot;
-
-    /**
      * \brief vector of cartesian poses of end-effectors and the beginning of a CoM movement
      */
     std::map<std::string, KDL::Frame> limbs_poses;
