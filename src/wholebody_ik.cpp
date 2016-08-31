@@ -476,16 +476,26 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 
             d_q = pinvJ* b_v_ee_desired/d_t;
 
-//             print_eigen_matrix(b_v_ee_desired);
-//             abort();
+            std::cout<<"com_current :"<<data->ee_current.p<<std::endl;
+            std::cout<<"com_desired :"<<data->ee_desired.p<<std::endl;
+
+            Eigen::MatrixXd pinv_com;
+            pinv_com = Eigen::Matrix<double,WB_DOFS,COM_DIM>();
+            
+            pinv_com.block<WB_DOFS,COM_DIM>(0,0) = pinvJ.block<WB_DOFS,COM_DIM>(0,0);
+
         }
         else
+        {
             d_q.setZero();
+            std::cout<<"converged"<<std::endl;
+        }
     }
 
     for(int i = 0;i<dofs;i++)
     {
-        out[i] = d_q(i);
+//         out[i] = d_q(i);
+        out[i] = std::min(std::max(d_q(i),-0.1),0.1);
     }
 
     return out;

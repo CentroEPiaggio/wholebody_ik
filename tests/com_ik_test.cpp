@@ -18,6 +18,8 @@
 #include "visual_utils.cpp"
 #include <trajectory_generator/trajectory_generator.h>
 
+using namespace yarp::math;
+
 int main(int argc, char** argv)
 {
     std::cout<<" -- This is a test to check the wholebody_ik library for the CoM --"<<std::endl;
@@ -44,6 +46,7 @@ int main(int argc, char** argv)
     std::string urdf = rf.find("urdf_path").asString();
     std::string srdf = rf.find("srdf_path").asString();
     int period = rf.find("thread_period").asInt();
+    double s_period = (double)period / 1000.0;
 
     wholebody_ik IK(robot,urdf,srdf,period);
     
@@ -85,8 +88,8 @@ int main(int argc, char** argv)
     chains.push_back(chain);
     visual_utils vutils("e",f_frame,chains);
 
-    initial_poses[chain] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.059, y_sign*0.181, 1.137));
-    desired_poses[chain] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.059, y_sign*0.181, 1.09));
+    initial_poses[chain] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.063, y_sign*0.181, 1.138));
+    desired_poses[chain] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.063, y_sign*0.181, 1.093));
     q_out[chain] = yarp::sig::Vector(31,0.0);
     q_init[chain] = yarp::sig::Vector(q_out.at(chain).size(),0.0);
 
@@ -156,20 +159,33 @@ int main(int argc, char** argv)
         for(auto& traj_gen:traj_gens)
         {
             traj_gen.second.line_trajectory(secs,next_pose,next_twist);
+            next_pose = desired_poses.at(traj_gen.first); //HACK: no traj
             IK.set_desired_ee_pose(traj_gen.first,next_pose);
 
-            double cart_error = IK.cartToJnt(traj_gen.first,q_sense.at(traj_gen.first),q_out.at(traj_gen.first));
+//             double cart_error = IK.cartToJnt(traj_gen.first,q_sense.at(traj_gen.first),q_out.at(traj_gen.first));
 
-            if(cart_error==-1) std::cout<<" -- NOT CONVERGED: "<<traj_gen.first<<std::endl;
+//             if(cart_error==-1) std::cout<<" -- NOT CONVERGED: "<<traj_gen.first<<std::endl;
 
-            for(int i=0;i<q_out.at(traj_gen.first).size();i++)
+            usleep(5000000);
+
+            while(ros::ok())
             {
-                joints.at(traj_gen.first).at(i) = q_out.at(traj_gen.first)[i];
+//                 int x;
+//                 std::cin >> x;
+                
+                q_out.at(traj_gen.first) = q_sense.at(traj_gen.first) + 1.0* IK.next_step(chain,q_sense.at(traj_gen.first),0.04) * s_period;
+
+                for(int i=0;i<q_out.at(traj_gen.first).size();i++)
+                {
+                    joints.at(traj_gen.first).at(i) = q_out.at(traj_gen.first)[i];
+                }
+
+                vutils.set_data(next_pose, joints.at(traj_gen.first), traj_gen.first);
+
+                q_sense.at(traj_gen.first) = q_out.at(traj_gen.first);
+
+                usleep(50000);
             }
-
-            vutils.set_data(next_pose, joints.at(traj_gen.first), traj_gen.first);
-
-            q_sense.at(traj_gen.first) = q_out.at(traj_gen.first);
         }
 
         usleep(50000);
