@@ -25,7 +25,7 @@ include(YarpInstallationHelpers)
 
 file(GLOB conf conf/*.ini)
 
-yarp_install(FILES ${conf} DESTINATION ${YARP_CONTEXTS_INSTALL_DIR}/arms_ik)   # directory name matches what is provided as "default context" in code
+yarp_install(FILES ${conf} DESTINATION ${YARP_CONTEXTS_INSTALL_DIR}/wholebody_ik)   # directory name matches what is provided as "default context" in code
 
 
 add_custom_target(  copy_conf_files_to_build ALL
