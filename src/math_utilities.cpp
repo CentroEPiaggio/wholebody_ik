@@ -137,6 +137,17 @@ static Eigen::Matrix<double,31,3> pseudoInverseQR_313(const Eigen::Matrix<double
   return Q.leftCols(Rtot.topRows(Rtot.cols()).cols())*Rtot.topRows(Rtot.cols()).transpose().inverse();
 }
 
+static Eigen::Matrix<double,31,18> pseudoInverseQR_3118(const Eigen::Matrix<double,18,31> &a, double epsilon = std::numeric_limits<double>::epsilon())
+{
+  Eigen::HouseholderQR<Eigen::Matrix<double,31,18>> qr(a.transpose());
+
+  Eigen::Matrix<double,31,18> Rtot = qr.matrixQR().template triangularView<Eigen::Upper>();
+
+  Eigen::Matrix<double,31,31> Q = qr.householderQ();
+
+  return Q.leftCols(Rtot.topRows(Rtot.cols()).cols())*Rtot.topRows(Rtot.cols()).transpose().inverse();
+}
+
 static Eigen::Matrix<double,31,21> pseudoInverseQR_3121(const Eigen::Matrix<double,21,31> &a, double epsilon = std::numeric_limits<double>::epsilon())
 {
   Eigen::HouseholderQR<Eigen::Matrix<double,31,21>> qr(a.transpose());

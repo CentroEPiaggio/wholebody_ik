@@ -69,6 +69,7 @@ int main(int argc, char** argv)
 
     std::string chain;
     std::string f_frame;
+    std::string other_leg;
     double y_sign;
 
     if(right)
@@ -84,14 +85,22 @@ int main(int argc, char** argv)
         y_sign = -1;
     }
 
+    other_leg = (f_frame=="r_sole")?"left_leg":"right_leg";
     std::vector<std::string> chains;
     chains.push_back(chain);
+    chains.push_back(other_leg);
+    chains.push_back("left_arm");
+    chains.push_back("right_arm");
     visual_utils vutils("e",f_frame,chains);
 
     initial_poses[chain] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.063, y_sign*0.181, 1.138));
-    desired_poses[chain] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.063, y_sign*0.181, 1.093));
+    desired_poses[chain] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.063, y_sign*0.081, 1.138));
     q_out[chain] = yarp::sig::Vector(31,0.0);
     q_init[chain] = yarp::sig::Vector(q_out.at(chain).size(),0.0);
+
+    desired_poses["right_arm"] = KDL::Frame(KDL::Rotation::RPY(-0.897, -1.225, 0.914),KDL::Vector(0.412, -0.635, 0.947));
+    desired_poses["left_arm"] = KDL::Frame(KDL::Rotation::RPY(0.897, -1.225, -0.914),KDL::Vector(0.412, 0.273, 0.947));
+    desired_poses[other_leg] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.0, y_sign*0.362, 0.0));
 
     iDynUtils idynutils(robot,urdf,srdf);
 
@@ -142,6 +151,8 @@ int main(int argc, char** argv)
         IK.initialize(joints_.first,desired_poses.at(joints_.first),q_sense.at(joints_.first));
     }
 
+    for(auto pose:desired_poses) vutils.set_chain_target(pose.second,pose.first);
+    
     ros::Time start = ros::Time::now();
     ros::Duration exp;
     KDL::Frame next_pose;
@@ -170,9 +181,6 @@ int main(int argc, char** argv)
 
             while(ros::ok())
             {
-//                 int x;
-//                 std::cin >> x;
-                
                 q_out.at(traj_gen.first) = q_sense.at(traj_gen.first) + 1.0* IK.next_step(chain,q_sense.at(traj_gen.first),0.04) * s_period;
 
                 for(int i=0;i<q_out.at(traj_gen.first).size();i++)
