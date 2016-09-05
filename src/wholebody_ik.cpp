@@ -326,12 +326,14 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
             Eigen::MatrixXd pinvJ;
             Eigen::MatrixXd In;
             Eigen::MatrixXd des_q;
+			Eigen::MatrixXd des_dq;
             Eigen::MatrixXd input_q;
 
             if(dofs==ARM_DOFS)
             {
                 In = Eigen::Matrix<double,ARM_DOFS,ARM_DOFS>();
                 des_q = Eigen::Matrix<double,ARM_DOFS,1>();
+				des_dq = Eigen::Matrix<double,ARM_DOFS,1>();
                 input_q = Eigen::Matrix<double,ARM_DOFS,1>();
                 pinvJ = Eigen::Matrix<double,ARM_DOFS,CARTESIAN_DIM>();
                 pinvJ = math_utilities::pseudoInverseQR_76(data->jacobian);
@@ -340,6 +342,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
             {
                 In = Eigen::Matrix<double,LEG_DOFS,LEG_DOFS>();
                 des_q = Eigen::Matrix<double,LEG_DOFS,1>();
+				des_dq = Eigen::Matrix<double,LEG_DOFS,1>();
                 input_q = Eigen::Matrix<double,LEG_DOFS,1>();
                 pinvJ = Eigen::Matrix<double,LEG_DOFS,CARTESIAN_DIM>();
                 pinvJ = math_utilities::pseudoInverseQR_66(data->jacobian);
@@ -347,15 +350,22 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 
             In.setZero();
             for(int w=0;w<dofs;w++) In(w,w)=1.0;
-            des_q.setZero();
-            des_q(1)=(chain=="right_arm")?0.35:des_q(1);
-            des_q(1)=(chain=="left_arm")?-0.35:des_q(1);
-            double K_null = (chain=="right_arm" || chain=="left_arm")?0.05:0.0; //HACK to avoid arms joint limits
 
-            math_utilities::vectorYARPToEigen(q_input,input_q);
+			des_q.setZero();
+			des_q(1)=(chain=="right_arm")?0.35:des_q(1);
+			des_q(1)=(chain=="left_arm")?-0.35:des_q(1);
+			math_utilities::vectorYARPToEigen(q_input,input_q);
+			des_dq.setZero();
 
-            d_q = pinvJ* b_v_ee_desired/d_t + (In-pinvJ*data->jacobian) *K_null* (des_q-input_q);
-        }
+			if(dofs==ARM_DOFS)
+			{
+				des_dq(1) = ((des_q-input_q)(1))/d_t;
+				des_dq(1) = std::min(std::max(des_dq(1),-0.1),0.1);
+			}
+
+			d_q = pinvJ* b_v_ee_desired/d_t + (In-pinvJ*data->jacobian) * (des_dq); //null projection to avoid joint limits
+
+		}
         else
             d_q.setZero();
     }
