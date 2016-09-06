@@ -173,6 +173,11 @@ void wholebody_ik::set_desired_ee_pose(std::string chain, KDL::Frame cartesian_p
     update_limbs_poses(chain);
 }
 
+double wholebody_ik::get_error(std::string chain)
+{
+    return chains.at(chain)->car_err;
+}
+
 bool wholebody_ik::cartesian_action_completed(std::string chain, double precision)
 {
     if(!chains.at(chain)->initialized) {warn_not_initialized(chain); return false;}

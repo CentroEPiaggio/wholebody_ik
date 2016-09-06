@@ -140,6 +140,12 @@ public:
      */
     bool cartesian_action_completed(std::string chain, double precision);
     double K;
+
+    /**
+     * \brief
+     * @return the current error (computed in the previous next_step call with respect to the desired position
+     */
+    double get_error(std::string chain);
 private:
 
     std::map<std::string,chain_data*> chains;
