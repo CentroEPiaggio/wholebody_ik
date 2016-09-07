@@ -41,6 +41,7 @@ public:
     kinematic_chain* kin_chain;
 
     bool initialized;
+    bool set;
 
     KDL::Frame ee_current;
     KDL::Frame ee_desired;        
@@ -49,7 +50,7 @@ public:
     Eigen::MatrixXd jacobian;
 
     bool first_step;
-    bool com=false;
+    bool wb=false;
 
     inline std::string get_ee_link(){return ee_link;}
     inline std::string get_base_link(){return base_link;}
@@ -101,7 +102,7 @@ public:
     * @param q_input FIXME
     * 
     */
-    bool initialize(std::string chain, KDL::Frame cartesian_pose, const yarp::sig::Vector& q_input);
+    bool initialize(std::string chain, const yarp::sig::Vector& q_input);
     
     /**
      * set_desired_ee_pose
@@ -111,6 +112,10 @@ public:
      */
     void set_desired_ee_pose(std::string chain, KDL::Frame cartesian_pose);
     
+    /**
+     * FIXME
+     */
+    void set_desired_wb_pose(std::string chain, std::map<std::string, KDL::Frame> cartesian_poses);
     /**
      * next_step
      * \brief computes dq (joint speed update)
@@ -151,6 +156,7 @@ private:
     std::map<std::string,chain_data*> chains;
 
     void warn_not_initialized(std::string str);
+    void warn_desired_not_set(std::string str);
     void print_eigen_matrix(const Eigen::MatrixXd& data);
     void print_YARP_matrix(const yarp::sig::Matrix& data);
 
@@ -161,11 +167,9 @@ private:
     double d_t=1;
 
     /**
-     * \brief vector of cartesian poses of end-effectors and the beginning of a CoM movement
+     * \brief vector of desired cartesian poses of end-effectors and CoM
      */
-    std::map<std::string, KDL::Frame> limbs_poses;
-
-    void update_limbs_poses(std::string chain);
+    std::map<std::string, KDL::Frame> desired_poses;
 };
 
 #endif //WHOLEBODY_IK_H

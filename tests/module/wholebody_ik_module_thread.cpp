@@ -201,7 +201,7 @@ bool wholebody_ik_thread::prepare_for_new_target()
         {
             yarp::sig::Vector q_i(chains.at(des_pose.first).kin_chain->getNrOfDOFs(),0.0);
             model.fromIDynToRobot(input, q_i, *chains.at(des_pose.first).kin_chain);
-            ik.initialize(chains.at(des_pose.first).name,chains.at(des_pose.first).current_pose,q_i);
+            ik.initialize(chains.at(des_pose.first).name,q_i);
             chains.at(des_pose.first).initialized=true;
 
 //             chains.at(des_pose.first).print();

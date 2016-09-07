@@ -145,7 +145,7 @@ int main(int argc, char** argv)
     joints.resize(q_out.size());
     yarp::sig::Vector q_sense = q_init;
 
-    IK.initialize(chain,desired_poses.at(chain),q_sense);
+    IK.initialize(chain,q_sense);
 
     for(int i=0;i<q_out.size();i++)
     {

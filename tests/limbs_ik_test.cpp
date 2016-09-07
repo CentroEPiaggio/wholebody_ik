@@ -118,7 +118,7 @@ int main(int argc, char** argv)
 
         vutils.set_data(desired_poses.at(joints_.first), joints_.second, joints_.first);
         traj_gens.at(joints_.first).line_initialize(traj_duration,initial_poses.at(joints_.first),desired_poses.at(joints_.first));
-        IK.initialize(joints_.first,desired_poses.at(joints_.first),q_sense.at(joints_.first));
+        IK.initialize(joints_.first,q_sense.at(joints_.first));
     }
     
     ros::Time start = ros::Time::now();
