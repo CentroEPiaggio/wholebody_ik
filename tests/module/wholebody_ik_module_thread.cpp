@@ -277,7 +277,7 @@ void wholebody_ik_thread::control_law()
             yarp::sig::Vector q_arm(chain.second.kin_chain->getNrOfDOFs(), 0.0);
             yarp::sig::Vector q_out(chain.second.kin_chain->getNrOfDOFs(), 0.0);
             model.fromIDynToRobot(input, q_arm, *chain.second.kin_chain);
-            double cart_error = ik.cartToJnt(chain.second.name,q_arm,q_out,0.0001);
+            double cart_error = ik.cartToJnt(chain.second.name,q_arm,q_out,0.001);
 
             if(cart_error==-1)
             {
