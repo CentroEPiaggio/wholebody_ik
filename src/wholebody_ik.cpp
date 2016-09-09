@@ -223,10 +223,45 @@ void wholebody_ik::set_desired_wb_poses(std::string chain, std::map<std::string,
     chains.at(chain)->set=true;
 }
 
+void wholebody_ik::get_current_wb_poses(std::string chain, std::map< std::string, KDL::Frame >& cartesian_poses)
+{
+    int link_index;
+
+    for(auto pose:chains.at(chain)->desired_poses)
+    {
+        if(pose.first!="COM")
+        {
+            link_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(pose.first);
+
+            cartesian_poses[pose.first] = chains.at(chain)->idynutils.iDyn3_model.getPositionKDL(link_index);
+        }
+        else
+        {
+            cartesian_poses[pose.first] = KDL::Frame(KDL::Rotation::Identity(), chains.at(chain)->idynutils.iDyn3_model.getCOMKDL());
+        }
+    }
+}
+
 void wholebody_ik::get_desired_wb_poses(std::string chain, std::map<std::string, KDL::Frame>& cartesian_poses)
 {
     for(auto pose:chains.at(chain)->desired_poses)
         cartesian_poses[pose.first] = pose.second;
+}
+
+void wholebody_ik::get_current_ee_pose(std::string chain, KDL::Frame& cartesian_pose)
+{
+    std::string frame;
+
+    if(chain=="right_arm") frame="RSoftHand";
+    if(chain=="left_arm") frame="LSoftHand";
+    if(chain=="right_leg") frame="r_sole";
+    if(chain=="left_leg") frame="l_sole";
+
+    int link_index;
+
+    link_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(frame);
+
+    cartesian_pose = chains.at(chain)->idynutils.iDyn3_model.getPositionKDL(link_index);
 }
 
 void wholebody_ik::set_desired_ee_pose(std::string chain, KDL::Frame cartesian_pose)
@@ -242,21 +277,7 @@ void wholebody_ik::set_desired_ee_pose_as_current(std::string chain)
 {
     if(!chains.at(chain)->initialized) {warn_not_initialized(chain); return;}
 
-    std::string frame = "l_sole";
-    std::string r_foot_frame = "r_sole";
-    std::string l_hand_frame = "LSoftHand";
-    std::string r_hand_frame = "RSoftHand";
-
-    if(chain=="right_arm") frame="RSoftHand";
-    if(chain=="left_arm") frame="LSoftHand";
-    if(chain=="right_leg") frame="r_sole";
-    if(chain=="left_leg") frame="l_sole";
-
-    int link_index;
-
-    link_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(frame);
-
-    chains.at(chain)->ee_desired = chains.at(chain)->idynutils.iDyn3_model.getPositionKDL(link_index);
+    get_current_ee_pose(chain, chains.at(chain)->ee_desired);
 
     chains.at(chain)->set=true;
 }

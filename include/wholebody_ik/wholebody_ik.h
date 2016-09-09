@@ -120,6 +120,11 @@ public:
     /**
      * FIXME
      */
+    void get_current_ee_pose(std::string chain, KDL::Frame& cartesian_pose);
+
+    /**
+     * FIXME
+     */
     void set_desired_ee_pose_as_current(std::string chain);
     
     /**
@@ -136,6 +141,11 @@ public:
      * FIXME
      */
     void get_desired_wb_poses(std::string chain, std::map<std::string, KDL::Frame>& cartesian_poses);
+    
+    /**
+     * FIXME
+     */
+    void get_current_wb_poses(std::string chain, std::map<std::string, KDL::Frame>& cartesian_poses);
 
     /**
      * next_step

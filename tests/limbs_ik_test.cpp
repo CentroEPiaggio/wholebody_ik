@@ -59,8 +59,8 @@ int main(int argc, char** argv)
     chains.push_back("left_leg");
     visual_utils vutils("e","Waist",chains);
     
-    initial_poses["right_arm"] = KDL::Frame(KDL::Rotation::RPY(-0.830, -1.194, 0.831),KDL::Vector(0.410, -0.45, -0.14));
-    desired_poses["right_arm"] = initial_poses["right_arm"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.2,-0.2,-0.2));
+//     initial_poses["right_arm"] = KDL::Frame(KDL::Rotation::RPY(-0.830, -1.194, 0.831),KDL::Vector(0.410, -0.45, -0.14));
+//     desired_poses["right_arm"] = initial_poses["right_arm"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.2,-0.2,-0.2));
     q_out["right_arm"] = yarp::sig::Vector(7,0.0);
     q_init["right_arm"] = yarp::sig::Vector(q_out.at("right_arm").size(),0.0);
     q_init.at("right_arm")[0] = 0.6; //NOTE: to start far from the singularity
@@ -72,8 +72,8 @@ int main(int argc, char** argv)
     joints.at("right_arm").resize(q_out.at("right_arm").size());
     traj_gens["right_arm"];
 
-    initial_poses["left_arm"] = KDL::Frame(KDL::Rotation::RPY(0.872, -1.233, -0.887),KDL::Vector(0.410, 0.45, -0.14));
-    desired_poses["left_arm"] = initial_poses["left_arm"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.2,0.2,-0.2));
+//     initial_poses["left_arm"] = KDL::Frame(KDL::Rotation::RPY(0.872, -1.233, -0.887),KDL::Vector(0.410, 0.45, -0.14));
+//     desired_poses["left_arm"] = initial_poses["left_arm"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.2,0.2,-0.2));
     q_out["left_arm"] = yarp::sig::Vector(7,0.0);
     q_init["left_arm"] = yarp::sig::Vector(q_out.at("left_arm").size(),0.0);
     q_init.at("left_arm")[0] = 0.6; //NOTE: to start far from the singularity
@@ -85,8 +85,8 @@ int main(int argc, char** argv)
     joints.at("left_arm").resize(q_out.at("left_arm").size());
     traj_gens["left_arm"];
 
-    initial_poses["right_leg"] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.006, -0.181, -1.083));
-    desired_poses["right_leg"] = initial_poses["right_leg"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0,-0.2,0.2));
+//     initial_poses["right_leg"] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.006, -0.181, -1.083));
+//     desired_poses["right_leg"] = initial_poses["right_leg"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0,-0.2,0.2));
     q_out["right_leg"] = yarp::sig::Vector(6,0.0);
     q_init["right_leg"] = yarp::sig::Vector(q_out.at("right_leg").size(),0.0);
     q_init.at("right_leg")[2] = -0.3; //NOTE: to start far from the singularity
@@ -97,8 +97,8 @@ int main(int argc, char** argv)
     joints.at("right_leg").resize(q_out.at("right_leg").size());
     traj_gens["right_leg"];
 
-    initial_poses["left_leg"] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.006, 0.181, -1.083));
-    desired_poses["left_leg"] = initial_poses["left_leg"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0,0.2,0.2));
+//     initial_poses["left_leg"] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.006, 0.181, -1.083));
+//     desired_poses["left_leg"] = initial_poses["left_leg"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0,0.2,0.2));
     q_out["left_leg"] = yarp::sig::Vector(6,0.0);
     q_init["left_leg"] = yarp::sig::Vector(q_out.at("left_leg").size(),0.0);
     q_init.at("left_leg")[2] = -0.3; //NOTE: to start far from the singularity
@@ -116,9 +116,20 @@ int main(int argc, char** argv)
             joints_.second.at(i) = q_sense.at(joints_.first)[i];
         }
 
+        IK.initialize(joints_.first,q_sense.at(joints_.first));
+        IK.set_desired_ee_pose_as_current(joints_.first);
+        IK.get_current_ee_pose(joints_.first,initial_poses[joints_.first]);
+    }
+
+    desired_poses["right_arm"] = initial_poses["right_arm"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.2,-0.2,-0.2));
+    desired_poses["left_arm"] = initial_poses["left_arm"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.2,0.2,-0.2));
+    desired_poses["right_leg"] = initial_poses["right_leg"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0,-0.2,0.2));
+    desired_poses["left_leg"] = initial_poses["left_leg"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0,0.2,0.2));
+
+    for(auto& joints_:joints)
+    {
         vutils.set_data(desired_poses.at(joints_.first), joints_.second, joints_.first);
         traj_gens.at(joints_.first).line_initialize(traj_duration,initial_poses.at(joints_.first),desired_poses.at(joints_.first));
-        IK.initialize(joints_.first,q_sense.at(joints_.first));
     }
     
     ros::Time start = ros::Time::now();
