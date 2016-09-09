@@ -363,7 +363,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
     // ------ transforming the Jacobian in {B}
     //
     // base_link = {B} , ee_link = {E}
-    if(chains.at(chain)->wb) //WB
+    if(data->wb) //WB
     {
         yarp::sig::Matrix b_J_com;
         if(!data->idynutils.iDyn3_model.getCOMJacobian(b_J_com))
@@ -436,7 +436,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
             data->jacobian.block<CARTESIAN_DIM,LEG_DOFS>(0,0) = ee_jac.block<CARTESIAN_DIM,LEG_DOFS>(0,compute_cols_to_remove(chain));
     }
 
-    if(!chains.at(chain)->wb) // NOT WB
+    if(!data->wb) // NOT WB
     {
         //
         // ------ transforming the ee position in {B}
