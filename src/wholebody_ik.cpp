@@ -349,10 +349,11 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
     yarp::sig::Vector Eo(3);
     Eigen::Vector3d zero; zero.setZero();
     yarp::sig::Vector out(WB_DOFS-FLOATING_BASE_DOFS ,0.0);
+    if(!data->wb) out.resize(dofs ,0.0);
     Eigen::MatrixXd d_q;
 
     yarp::sig::Vector q_all(data->idynutils.getJointNames().size(),0.0);
-    if(!chains.at(chain)->wb) data->idynutils.fromRobotToIDyn(q_input,q_all,*data->kin_chain);
+    if(!data->wb) data->idynutils.fromRobotToIDyn(q_input,q_all,*data->kin_chain);
     else q_all=q_input;
     data->idynutils.updateiDyn3Model(q_all,false);
 
