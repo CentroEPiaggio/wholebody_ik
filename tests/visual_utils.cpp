@@ -166,7 +166,7 @@ void set_chain_joints( std::vector<double> chain_joints, std::string chain)
 
 void set_data(KDL::Frame base_T_ee, std::vector<double> chain_joints, std::string chain)
 {
-    if(chain=="com_left_foot" || chain=="com_right_foot")
+    if(chain=="wb_left" || chain=="wb_right")
     {
         set_all_joints(chain_joints);
     }

@@ -24,7 +24,7 @@ int main(int argc, char** argv)
 {
     std::cout<<" -- This is a test to check the wholebody_ik library for the CoM --"<<std::endl;
 
-    bool right=false; //change this to perform the test for com wrt left or right com_left_foot
+    bool right=false; //change this to perform the test for com wrt left or right foot
 
     if(argc>1)
     {
@@ -51,6 +51,7 @@ int main(int argc, char** argv)
     wholebody_ik IK(robot,urdf,srdf,period);
     
     std::map<std::string,KDL::Frame> desired_poses;
+    std::map<std::string,KDL::Frame> next_poses;
     std::map<std::string,KDL::Frame> initial_poses; //should come from sensing
     std::map<std::string,yarp::sig::Vector> q_init;
     std::map<std::string,yarp::sig::Vector> q_out;
@@ -74,16 +75,23 @@ int main(int argc, char** argv)
 
     if(right)
     {
-        chain = "com_right_foot";
+        chain = "wb_right";
         f_frame = "r_sole";
         y_sign = 1;
     }
     else
     {
-        chain = "com_left_foot";
+        chain = "wb_left";
         f_frame = "l_sole";
         y_sign = -1;
     }
+
+    std::map<std::string, std::string> links_to_chains;
+    links_to_chains["LSoftHand"] = "left_arm";
+    links_to_chains["RSoftHand"] = "right_arm";
+    links_to_chains["l_sole"] = "left_leg";
+    links_to_chains["r_sole"] = "right_leg";
+    links_to_chains["COM"] = chain;
 
     other_leg = (f_frame=="r_sole")?"left_leg":"right_leg";
     std::vector<std::string> chains;
@@ -92,15 +100,6 @@ int main(int argc, char** argv)
     chains.push_back("left_arm");
     chains.push_back("right_arm");
     visual_utils vutils("e",f_frame,chains);
-
-    initial_poses[chain] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.063, y_sign*0.181, 1.138));
-    desired_poses[chain] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.063, y_sign*0.081, 1.138));
-    q_out[chain] = yarp::sig::Vector(31,0.0);
-    q_init[chain] = yarp::sig::Vector(q_out.at(chain).size(),0.0);
-
-    desired_poses["right_arm"] = KDL::Frame(KDL::Rotation::RPY(-0.897, -1.225, 0.914),KDL::Vector(0.412, -0.635, 0.947));
-    desired_poses["left_arm"] = KDL::Frame(KDL::Rotation::RPY(0.897, -1.225, -0.914),KDL::Vector(0.412, 0.273, 0.947));
-    desired_poses[other_leg] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.0, y_sign*0.362, 0.0));
 
     iDynUtils idynutils(robot,urdf,srdf);
 
@@ -126,6 +125,9 @@ int main(int argc, char** argv)
     yarp::sig::Vector q_torso(3,0.0);
     yarp::sig::Vector q_head(2,0.0);
 
+    q_out[chain] = yarp::sig::Vector(31,0.0);
+    q_init[chain] = yarp::sig::Vector(q_out.at(chain).size(),0.0);
+
     idynutils.fromRobotToIDyn(q_left_arm,q_init.at(chain),idynutils.left_arm);
     idynutils.fromRobotToIDyn(q_right_arm,q_init.at(chain),idynutils.right_arm);
     idynutils.fromRobotToIDyn(q_left_leg,q_init.at(chain),idynutils.left_leg);
@@ -137,7 +139,6 @@ int main(int argc, char** argv)
     q_sense.at(chain) = q_init.at(chain);
     joints[chain];
     joints.at(chain).resize(q_out.at(chain).size());
-    traj_gens[chain];
 
     for(auto& joints_:joints)
     {
@@ -146,16 +147,28 @@ int main(int argc, char** argv)
             joints_.second.at(i) = q_sense.at(joints_.first)[i];
         }
 
-        vutils.set_data(desired_poses.at(joints_.first), joints_.second, joints_.first);
-        traj_gens.at(joints_.first).line_initialize(traj_duration,initial_poses.at(joints_.first),desired_poses.at(joints_.first));
+        
         IK.initialize(joints_.first,q_sense.at(joints_.first));
     }
 
-    for(auto pose:desired_poses) vutils.set_chain_target(pose.second,pose.first);
+    IK.set_desired_wb_poses_as_current(chain);
+    IK.get_desired_wb_poses(chain,initial_poses);
+
+    desired_poses["RSoftHand"] = initial_poses.at("RSoftHand") * KDL::Frame(KDL::Rotation::Identity(), KDL::Vector(0.1,0,0));
+    desired_poses["LSoftHand"] = initial_poses.at("LSoftHand");
+    desired_poses["r_sole"] = initial_poses.at("r_sole");
+    desired_poses["l_sole"] = initial_poses.at("l_sole");
+    desired_poses["COM"] = initial_poses.at("COM");
+
+    for(auto pose:desired_poses)
+    {
+        traj_gens[pose.first].line_initialize(traj_duration,initial_poses.at(pose.first),desired_poses.at(pose.first));
+        vutils.set_data(desired_poses.at(pose.first), joints.at(chain), chain);
+        vutils.set_chain_target(pose.second,chain);
+    }
     
     ros::Time start = ros::Time::now();
     ros::Duration exp;
-    KDL::Frame next_pose;
     KDL::Twist next_twist;
     double secs;
     double old_t = secs = 0;
@@ -169,32 +182,22 @@ int main(int argc, char** argv)
 
         for(auto& traj_gen:traj_gens)
         {
-            traj_gen.second.line_trajectory(secs,next_pose,next_twist);
-            next_pose = desired_poses.at(traj_gen.first); //HACK: no traj
-            IK.set_desired_ee_pose(traj_gen.first,next_pose);
-
-//             double cart_error = IK.cartToJnt(traj_gen.first,q_sense.at(traj_gen.first),q_out.at(traj_gen.first));
-
-//             if(cart_error==-1) std::cout<<" -- NOT CONVERGED: "<<traj_gen.first<<std::endl;
-
-            usleep(5000000);
-
-            while(ros::ok())
-            {
-                q_out.at(traj_gen.first) = q_sense.at(traj_gen.first) + 1.0* IK.next_step(chain,q_sense.at(traj_gen.first),0.04) * s_period;
-
-                for(int i=0;i<q_out.at(traj_gen.first).size();i++)
-                {
-                    joints.at(traj_gen.first).at(i) = q_out.at(traj_gen.first)[i];
-                }
-
-                vutils.set_data(next_pose, joints.at(traj_gen.first), traj_gen.first);
-
-                q_sense.at(traj_gen.first) = q_out.at(traj_gen.first);
-
-                usleep(50000);
-            }
+            traj_gen.second.line_trajectory(secs,next_poses[traj_gen.first],next_twist);
+            vutils.set_data(next_poses.at(traj_gen.first), joints.at(chain), chain);
         }
+
+        IK.set_desired_wb_poses(chain,next_poses);
+
+        double cart_error = IK.cartToJnt(chain,q_sense.at(chain),q_out.at(chain));
+
+        if(cart_error==-1) std::cout<<" -- NOT CONVERGED: "<<chain<<std::endl;
+
+        for(int i=0;i<q_out.at(chain).size();i++)
+        {
+            joints.at(chain).at(i) = q_out.at(chain)[i];
+        }
+
+        q_sense.at(chain) = q_out.at(chain);
 
         usleep(50000);
 
