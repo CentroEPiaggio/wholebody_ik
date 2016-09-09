@@ -242,6 +242,29 @@ void wholebody_ik::set_desired_ee_pose(std::string chain, KDL::Frame cartesian_p
     chains.at(chain)->ee_desired=cartesian_pose;
 }
 
+void wholebody_ik::set_desired_ee_pose_as_current(std::string chain)
+{
+    if(!chains.at(chain)->initialized) {warn_not_initialized(chain); return;}
+
+    std::string frame = "l_sole";
+    std::string r_foot_frame = "r_sole";
+    std::string l_hand_frame = "LSoftHand";
+    std::string r_hand_frame = "RSoftHand";
+
+    if(chain=="right_arm") frame="RSoftHand";
+    if(chain=="left_arm") frame="LSoftHand";
+    if(chain=="right_leg") frame="r_sole";
+    if(chain=="left_leg") frame="l_sole";
+
+    int link_index;
+
+    link_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(frame);
+
+    chains.at(chain)->ee_desired = chains.at(chain)->idynutils.iDyn3_model.getPositionKDL(link_index);
+
+    chains.at(chain)->set=true;
+}
+
 double wholebody_ik::get_error(std::string chain)
 {
     return chains.at(chain)->car_err;
