@@ -172,10 +172,11 @@ int main(int argc, char** argv)
     KDL::Twist next_twist;
     double secs;
     double old_t = secs = 0;
+    double cart_error = 9999;
 
     while(ros::ok())
     {
-        std::cout<<"["<<old_t<<"]"<<std::endl;
+        std::cout<<"["<<old_t<<"]: "<<cart_error<<std::endl;
 
         old_t = secs;
         secs = exp.toSec() + ((double)exp.toNSec()) / 1000000000.0;
@@ -188,7 +189,7 @@ int main(int argc, char** argv)
 
         IK.set_desired_wb_poses(chain,next_poses);
 
-        double cart_error = IK.cartToJnt(chain,q_sense.at(chain),q_out.at(chain));
+        cart_error = IK.cartToJnt(chain,q_sense.at(chain),q_out.at(chain));
 
         if(cart_error==-1) std::cout<<" -- NOT CONVERGED: "<<chain<<std::endl;
 
