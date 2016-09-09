@@ -39,6 +39,27 @@
 
 using namespace yarp::math;
 
+std::string green(std::string text)
+{
+    std::string g="\033[0;32m";
+    std::string b="\033[0m";
+    return g + text + b;
+}
+
+std::string yellow(std::string text)
+{
+    std::string y="\033[0;33m";
+    std::string b="\033[0m";
+    return y + text + b;
+}
+
+std::string red(std::string text)
+{
+    std::string r="\033[0;31m";
+    std::string b="\033[0m";
+    return r + text + b;
+}
+
 chain_data::chain_data(std::string robot_name, std::string urdf_path, std::string srdf_path, std::string ee_link, std::string base_link, int dofs, std::string chain_name): idynutils(robot_name,urdf_path,srdf_path)
 {
     yarp::sig::Vector joint_max = idynutils.iDyn3_model.getJointBoundMax();
@@ -101,12 +122,12 @@ void wholebody_ik::print_YARP_matrix(const yarp::sig::Matrix& data)
 
 void wholebody_ik::warn_not_initialized(std::string str)
 {
-    std::cout<<" --------------- WARNING WB IK NOT PROPERLY INITIALIZED FOR '"<< str <<"'--------------- "<<std::endl;
+    std::cout<<yellow(" --------------- WARNING WB IK NOT PROPERLY INITIALIZED FOR '" + str + "'--------------- ")<<std::endl;
 }
 
 void wholebody_ik::warn_desired_not_set(std::string str)
 {
-    std::cout<<" --------------- WARNING NEVER SET DESIRED POSE FOR '"<< str <<"'--------------- "<<std::endl;
+    std::cout<<yellow(" --------------- WARNING NEVER SET DESIRED POSE FOR '" + str + "'--------------- ")<<std::endl;
 }
 
 bool wholebody_ik::initialize(std::string chain, const yarp::sig::Vector& q_input)
@@ -134,12 +155,12 @@ bool wholebody_ik::initialize(std::string chain, const yarp::sig::Vector& q_inpu
     int dim;
     if(data->wb)
     {
-        dim=COM_DIM;
-        desired_poses["l_sole"] = KDL::Frame::Identity();
-        desired_poses["r_sole"] = KDL::Frame::Identity();
-        desired_poses["LSoftHand"] = KDL::Frame::Identity();
-        desired_poses["RSoftHand"] = KDL::Frame::Identity();
-        desired_poses["COM"] = KDL::Frame::Identity();
+        dim=FULL_DIM;
+        data->desired_poses["l_sole"] = KDL::Frame::Identity();
+        data->desired_poses["r_sole"] = KDL::Frame::Identity();
+        data->desired_poses["LSoftHand"] = KDL::Frame::Identity();
+        data->desired_poses["RSoftHand"] = KDL::Frame::Identity();
+        data->desired_poses["COM"] = KDL::Frame::Identity();
     }
     else dim=CARTESIAN_DIM;
 
@@ -153,20 +174,49 @@ bool wholebody_ik::initialize(std::string chain, const yarp::sig::Vector& q_inpu
     
     data->initialized = true;
 
-    std::cout<<"=---------------------------"<<std::endl;
-    std::cout<<" WholeBody IK Library initialized. Created a "<<dim<<"x" <<dofs<<" Jacobian ("<<chain<<")"<<std::endl;
-    std::cout<<"=---------------------------"<<std::endl;
+    std::cout<<green("=---------------------------")<<std::endl;
+    std::cout<<green(" WholeBody IK Library initialized. Created a "+ std::to_string(dim) + "x" + std::to_string(dofs) + " Jacobian (" + chain + ")")<<std::endl;
+    std::cout<<green("=---------------------------")<<std::endl;
 
     return true;
 }
 
-void wholebody_ik::set_desired_wb_pose(std::string chain, std::map<std::string, KDL::Frame> cartesian_poses)
+void wholebody_ik::set_desired_wb_poses_as_current(std::string chain)
+{
+    if(!chains.at(chain)->initialized) {warn_not_initialized(chain); return;}
+
+    int link_index;
+    
+    for(auto& pose:chains.at(chain)->desired_poses)
+    {
+        if(pose.first!="COM")
+        {
+            link_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(pose.first);
+
+            if(link_index==-1)
+            {
+                std::cout<<" !! ERROR : UNABLE TO GET LINK INDEX !! "<<std::endl;
+                return;
+            }
+
+            pose.second = chains.at(chain)->idynutils.iDyn3_model.getPositionKDL(link_index);
+        }
+        else
+        {
+            pose.second = KDL::Frame(KDL::Rotation::Identity(), chains.at(chain)->idynutils.iDyn3_model.getCOMKDL());
+        }
+    }
+
+    chains.at(chain)->set=true;
+}
+
+void wholebody_ik::set_desired_wb_poses(std::string chain, std::map<std::string, KDL::Frame> cartesian_poses)
 {
     if(!chains.at(chain)->initialized) {warn_not_initialized(chain); return;}
 
     for(auto pose:cartesian_poses)
     {
-        if(desired_poses.count(pose.first)) desired_poses.at(pose.first) = pose.second;
+        if(chains.at(chain)->desired_poses.count(pose.first)) chains.at(chain)->desired_poses.at(pose.first) = pose.second;
         else
         {
             std::cout<<" --------------- WARNING wrong link name : "<<pose.first<<" --------------- "<<std::endl;
@@ -175,6 +225,12 @@ void wholebody_ik::set_desired_wb_pose(std::string chain, std::map<std::string, 
     }
 
     chains.at(chain)->set=true;
+}
+
+void wholebody_ik::get_desired_wb_poses(std::string chain, std::map<std::string, KDL::Frame>& cartesian_poses)
+{
+    for(auto pose:chains.at(chain)->desired_poses)
+        cartesian_poses[pose.first] = pose.second;
 }
 
 void wholebody_ik::set_desired_ee_pose(std::string chain, KDL::Frame cartesian_pose)
@@ -253,6 +309,18 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
     int l_hand_index = data->idynutils.iDyn3_model.getLinkIndex(l_hand_frame);
     int r_hand_index = data->idynutils.iDyn3_model.getLinkIndex(r_hand_frame);
     
+    std::vector<int> ee_index;
+    ee_index.push_back(l_foot_index);
+    ee_index.push_back(r_foot_index);
+    ee_index.push_back(l_hand_index);
+    ee_index.push_back(r_hand_index);
+
+    std::vector<std::string> ee_names;
+    ee_names.push_back(l_foot_frame);
+    ee_names.push_back(r_foot_frame);
+    ee_names.push_back(l_hand_frame);
+    ee_names.push_back(r_hand_frame);
+    
     yarp::sig::Matrix e_J_be, b_J_be;
     KDL::Frame ee_kdl;
     KDL::Frame pos_d;
@@ -261,7 +329,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
     Eigen::Matrix3d L;
     yarp::sig::Vector Eo(3);
     Eigen::Vector3d zero; zero.setZero();
-    yarp::sig::Vector out(dofs ,0.0);
+    yarp::sig::Vector out(WB_DOFS-FLOATING_BASE_DOFS ,0.0);
     Eigen::MatrixXd d_q;
 
     yarp::sig::Vector q_all(data->idynutils.getJointNames().size(),0.0);
@@ -318,7 +386,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
         }
         Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > rf_jac(b_J_rf.data(),b_J_rf.rows(),b_J_rf.cols());
 
-         // we use the floating base to perform the pseudoinverse, then we remove the extra joints velocity
+        // we use the floating base to perform the pseudoinverse, then we remove the extra joints velocity
         data->jacobian.block<COM_DIM,WB_DOFS>(0,0) = com_jac.block<COM_DIM,WB_DOFS>(0,0);
         data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM,0) = lh_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
         data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + CARTESIAN_DIM,0) = rh_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
@@ -448,30 +516,19 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
         yarp::sig::Matrix ee_d(3,3);
         yarp::sig::Matrix ee_c(3,3);
 
-        std::vector<int> ee_index;
-        ee_index.push_back(l_foot_index);
-        ee_index.push_back(r_foot_index);
-        ee_index.push_back(l_hand_index);
-        ee_index.push_back(r_hand_index);
-        std::vector<std::string> ee_names;
-        ee_names.push_back(l_foot_frame);
-        ee_names.push_back(r_foot_frame);
-        ee_names.push_back(l_hand_frame);
-        ee_names.push_back(r_hand_frame);
-
         KDL::Vector com_pos;
         math_utilities::vectorYARPToKDL(data->idynutils.iDyn3_model.getCOM(),com_pos);
-        math_utilities::vectorKDLToEigen((desired_poses.at("COM").p - com_pos), temp);
+        math_utilities::vectorKDLToEigen((data->desired_poses.at("COM").p - com_pos), temp);
         b_v_ee_desired.block<COM_DIM,1>(0,0) = temp;
 
         for(int limb_num=0;limb_num<4;limb_num++)
         {
             math_utilities::FrameYARPToKDL(data->idynutils.iDyn3_model.getPosition(ee_index.at(limb_num)),temp_current_ee);
 
-            math_utilities::vectorKDLToEigen((desired_poses.at(ee_names.at(limb_num)).p - temp_current_ee.p), temp);
+            math_utilities::vectorKDLToEigen((data->desired_poses.at(ee_names.at(limb_num)).p - temp_current_ee.p), temp);
             b_v_ee_desired.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num,0) = temp;
 
-            math_utilities::rotationKDLToYarp(desired_poses.at(ee_names.at(limb_num)).M,ee_d);
+            math_utilities::rotationKDLToYarp(data->desired_poses.at(ee_names.at(limb_num)).M,ee_d);
             math_utilities::rotationKDLToYarp(temp_current_ee.M,ee_c);
             Eo = locoman::utils::Orient_Error(ee_d, ee_c);
             math_utilities::vectorYARPToEigen(Eo,temp);
@@ -487,10 +544,12 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 
         if (!cartesian_action_completed(chain,precision))
         {
-            Eigen::MatrixXd pinvJ = Eigen::Matrix<double,WB_DOFS,COM_DIM>();
+            Eigen::MatrixXd pinvJ = Eigen::Matrix<double,WB_DOFS,FULL_DIM>();
             Eigen::MatrixXd input_q = Eigen::Matrix<double,WB_DOFS,1>();
 
             math_utilities::vectorYARPToEigen(q_input,input_q);
+
+            pinvJ = math_utilities::pseudoInverseQR_3727(data->jacobian);
 
             full_d_q = pinvJ* b_v_ee_desired/d_t;
 
@@ -503,7 +562,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
         }
     }
 
-    for(int i = 0;i<dofs;i++)
+    for(int i = 0;i<WB_DOFS-FLOATING_BASE_DOFS;i++)
     {
 //         out[i] = d_q(i);
         out[i] = std::min(std::max(d_q(i),-0.1),0.1);

@@ -46,6 +46,11 @@ public:
     KDL::Frame ee_current;
     KDL::Frame ee_desired;        
     double car_err;
+    
+    /**
+     * \brief vector of desired cartesian poses of end-effectors and CoM, to be used in the wholebody mode
+     */
+    std::map<std::string, KDL::Frame> desired_poses;
 
     Eigen::MatrixXd jacobian;
 
@@ -111,11 +116,22 @@ public:
      * @param cartesian_pose the target pose for the end-effector of the kinematic chain
      */
     void set_desired_ee_pose(std::string chain, KDL::Frame cartesian_pose);
-    
+
     /**
      * FIXME
      */
-    void set_desired_wb_pose(std::string chain, std::map<std::string, KDL::Frame> cartesian_poses);
+    void set_desired_wb_poses_as_current(std::string chain);
+
+    /**
+     * FIXME
+     */
+    void set_desired_wb_poses(std::string chain, std::map<std::string, KDL::Frame> cartesian_poses);
+
+    /**
+     * FIXME
+     */
+    void get_desired_wb_poses(std::string chain, std::map<std::string, KDL::Frame>& cartesian_poses);
+
     /**
      * next_step
      * \brief computes dq (joint speed update)
@@ -165,11 +181,6 @@ private:
      * \brief Period of the thread that is using this class (seconds) used for IK loop.
      */
     double d_t=1;
-
-    /**
-     * \brief vector of desired cartesian poses of end-effectors and CoM
-     */
-    std::map<std::string, KDL::Frame> desired_poses;
 };
 
 #endif //WHOLEBODY_IK_H
