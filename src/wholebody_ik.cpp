@@ -142,7 +142,7 @@ bool wholebody_ik::initialize(std::string chain, const yarp::sig::Vector& q_inpu
 
     if(!data->idynutils.iDyn3_model.setFloatingBaseLink(data->idynutils.iDyn3_model.getLinkIndex(data->get_base_link())))
     {
-        std::cout<<"!! - Error in setting floating base - !!"<<std::endl;
+        std::cout<<red("!! - Error in setting floating base - !!")<<std::endl;
         return false;
     }
 
@@ -195,7 +195,7 @@ void wholebody_ik::set_desired_wb_poses_as_current(std::string chain)
 
             if(link_index==-1)
             {
-                std::cout<<" !! ERROR : UNABLE TO GET LINK INDEX !! "<<std::endl;
+                std::cout<<red(" !! ERROR : UNABLE TO GET LINK INDEX !! ")<<std::endl;
                 return;
             }
 
@@ -217,11 +217,7 @@ void wholebody_ik::set_desired_wb_poses(std::string chain, std::map<std::string,
     for(auto pose:cartesian_poses)
     {
         if(chains.at(chain)->desired_poses.count(pose.first)) chains.at(chain)->desired_poses.at(pose.first) = pose.second;
-        else
-        {
-            std::cout<<" --------------- WARNING wrong link name : "<<pose.first<<" --------------- "<<std::endl;
-            return;
-        }
+        else std::cout<<yellow(" --------------- WARNING wrong link name : " + pose.first + " --------------- ")<<std::endl;
     }
 
     chains.at(chain)->set=true;
@@ -297,7 +293,7 @@ double wholebody_ik::cartToJnt(std::string chain, const yarp::sig::Vector& q_inp
 
     if(i >= maxiter)
     {
-        std::cout<<" --------------- WARNING Reached maximum number of iterations in cartToJnt --------------- "<<std::endl;
+        std::cout<<yellow(" --------------- WARNING Reached maximum number of iterations in cartToJnt --------------- ")<<std::endl;
         return -1;
     }
 
