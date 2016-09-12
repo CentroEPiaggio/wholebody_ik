@@ -257,6 +257,7 @@ static inline void FrameKDLToYARP(const KDL::Frame& in, yarp::sig::Matrix& out)
     vectorKDLToYARP(in.p,pos);
     out.setSubmatrix(rot,0,0);
     out.setSubmatrix(pos,0,3);
+    out(3,3)=1.0;
 }
 
 template<class Derived>
