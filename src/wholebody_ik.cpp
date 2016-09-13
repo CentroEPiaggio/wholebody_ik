@@ -254,24 +254,34 @@ void wholebody_ik::set_desired_wb_poses(std::string chain, std::map<std::string,
 
 void wholebody_ik::get_current_wb_poses(std::string chain, std::map< std::string, KDL::Frame >& cartesian_poses)
 {
-  
-  // TODO fix reference frames
-  
-    int link_index;
+	if(!chains.at(chain)->initialized) {warn_not_initialized(chain); return;}
 
-    for(auto pose:chains.at(chain)->desired_poses)
-    {
-        if(pose.first!="COM")
-        {
-            link_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(pose.first);
+	int link_index;
 
-            cartesian_poses[pose.first] = chains.at(chain)->idynutils.iDyn3_model.getPositionKDL(link_index);
-        }
-        else
-        {
-            cartesian_poses[pose.first] = KDL::Frame(KDL::Rotation::Identity(), chains.at(chain)->idynutils.iDyn3_model.getCOMKDL());
-        }
-    }
+	std::string base_frame = (chain=="wb_left")?"l_sole":"r_sole";
+	int base_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(base_frame);
+
+	for(auto pose:chains.at(chain)->desired_poses)
+	{
+		if(pose.first!="COM")
+		{
+			link_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(pose.first);
+			
+			if(link_index==-1)
+			{
+				std::cout<<red(" !! ERROR : UNABLE TO GET LINK INDEX !! ")<<std::endl;
+				return;
+			}
+
+			cartesian_poses[pose.first] = chains.at(chain)->idynutils.iDyn3_model.getPositionKDL(base_index,link_index);
+		}
+		else
+		{
+			KDL::Vector com;
+			math_utilities::vectorYARPToKDL(get_com_position_wrt_base_frame(chain,base_index),com);
+			cartesian_poses[pose.first] = KDL::Frame(KDL::Rotation::Identity(), com);
+		}
+	}
 }
 
 void wholebody_ik::get_desired_wb_poses(std::string chain, std::map<std::string, KDL::Frame>& cartesian_poses)
