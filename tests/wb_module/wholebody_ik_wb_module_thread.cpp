@@ -143,16 +143,13 @@ bool wholebody_ik_wb_thread::generate_poses_from_cmd(std::string cmd)
         return false;
     }
 
-    duration = 3.0;
     if(cmd=="com_on_left")
 	{
 		current_chain = "wb_left";
-		duration = 6.0;
 	}
 	if(cmd=="com_on_right")
 	{
 		current_chain = "wb_right";
-		duration = 6.0;
 	}
 	
     if(!initialized.at(current_chain))
@@ -191,16 +188,16 @@ bool wholebody_ik_wb_thread::generate_poses_from_cmd(std::string cmd)
 	if(cmd=="com_on_left")
 	{
 		msg.desired_poses.at("COM").p.x(0.0);
-		msg.desired_poses.at("COM").p.y(0.0);
-		msg.desired_poses.at("LSoftHand").p.y(0.25);
-		msg.desired_poses.at("RSoftHand").p.y(-0.25);
+		msg.desired_poses.at("COM").p.y(-0.04);
+		msg.desired_poses.at("LSoftHand").p.y(0.35);
+		msg.desired_poses.at("RSoftHand").p.y(-0.35);
 	}
 	else if(cmd=="com_on_right")
 	{
 		msg.desired_poses.at("COM").p.x(0.0);
-		msg.desired_poses.at("COM").p.y(0.0);
-		msg.desired_poses.at("LSoftHand").p.y(0.25);
-		msg.desired_poses.at("RSoftHand").p.y(-0.25);
+		msg.desired_poses.at("COM").p.y(0.04);
+		msg.desired_poses.at("LSoftHand").p.y(0.35);
+		msg.desired_poses.at("RSoftHand").p.y(-0.35);
 	}
 
 	IK.set_desired_wb_poses_as_current(current_chain);

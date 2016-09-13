@@ -59,7 +59,7 @@ namespace walkman
         wholebody_ik IK;
 
         double time = 0;
-        double duration = 3.0;
+        double duration = 5.0;
 
 		std::vector<std::string> chains;
 		std::map<std::string,std::string> base_frames;
