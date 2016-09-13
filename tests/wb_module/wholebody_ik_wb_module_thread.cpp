@@ -70,9 +70,19 @@ control_thread( module_prefix, rf, ph ), recv_interface("wb_interface"), IK(get_
 
     robot.fromRobotToIdyn(q_right_arm,q_left_arm,q_torso,q_right_leg,q_left_leg,q_head,home);
 
-	chain = "wb_left";
-	base_frame = "l_sole";
-	base_index = model.iDyn3_model.getLinkIndex(base_frame);
+	chains.push_back("wb_left");
+	chains.push_back("wb_right");
+
+	base_frames["wb_left"] = "l_sole";
+	base_frames["wb_right"] = "r_sole";
+
+	for(auto frame:base_frames)
+	{
+		base_indeces[frame.first] = model.iDyn3_model.getLinkIndex(frame.second);
+		initialized[frame.first] = false;
+	}
+
+	current_chain = "wb_left";
 
 	ee_names.push_back("LSoftHand");
 	ee_names.push_back("RSoftHand");
@@ -84,6 +94,7 @@ control_thread( module_prefix, rf, ph ), recv_interface("wb_interface"), IK(get_
 		ee_indeces.emplace(name,model.iDyn3_model.getLinkIndex(name));
 		traj_gens[name];
 	}
+	traj_gens["COM"];
 
 	available_commands.push_back("hands_up");
 	available_commands.push_back("hands_down");
@@ -91,6 +102,10 @@ control_thread( module_prefix, rf, ph ), recv_interface("wb_interface"), IK(get_
 	available_commands.push_back("hands_backward");
 	available_commands.push_back("hands_wide");
 	available_commands.push_back("hands_tight");
+	available_commands.push_back("com_on_left");
+	available_commands.push_back("com_on_right");
+	available_commands.push_back("com_up");
+	available_commands.push_back("com_down");
 }
 
 bool wholebody_ik_wb_thread::custom_init()
@@ -128,10 +143,22 @@ bool wholebody_ik_wb_thread::generate_poses_from_cmd(std::string cmd)
         return false;
     }
 
-    if(!initialized)
+    duration = 3.0;
+    if(cmd=="com_on_left")
 	{
-		IK.initialize(chain,input);
-		initialized=true;
+		current_chain = "wb_left";
+		duration = 6.0;
+	}
+	if(cmd=="com_on_right")
+	{
+		current_chain = "wb_right";
+		duration = 6.0;
+	}
+	
+    if(!initialized.at(current_chain))
+	{
+		IK.initialize(current_chain,input);
+		initialized.at(current_chain)=true;
 	}
 
     double offset_x=0;
@@ -145,16 +172,41 @@ bool wholebody_ik_wb_thread::generate_poses_from_cmd(std::string cmd)
     else if(cmd=="hands_wide") offset_y=-0.1;
     else if(cmd=="hands_tight") offset_y=0.1;
 
-	IK.get_current_wb_poses(chain,initial_poses);
+	IK.get_current_wb_poses(current_chain,initial_poses);
 
 	msg.desired_poses["LSoftHand"] = initial_poses.at("LSoftHand") * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(offset_z,-offset_y,-offset_x)); // :3
-	msg.desired_poses["RSoftHand"] = initial_poses.at("RSoftHand") * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(offset_z,offset_y,-offset_x)); // :3
+	msg.desired_poses["RSoftHand"] = initial_poses.at("RSoftHand") * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(offset_z,offset_y,-offset_x));
 	msg.desired_poses["l_sole"] = initial_poses.at("l_sole");
 	msg.desired_poses["r_sole"] = initial_poses.at("r_sole");
 
-    IK.set_desired_wb_poses_as_current(chain);
+	double com_offset_x=0;
+	double com_offset_y=0;
+	double com_offset_z=0;
+
+	if(cmd=="com_up") com_offset_z=0.1;
+	else if(cmd=="com_down") com_offset_z=-0.1;
+	
+	msg.desired_poses["COM"] = initial_poses.at("COM") * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(com_offset_x,com_offset_y,com_offset_z));
+
+	if(cmd=="com_on_left")
+	{
+		msg.desired_poses.at("COM").p.x(0.0);
+		msg.desired_poses.at("COM").p.y(0.0);
+		msg.desired_poses.at("LSoftHand").p.y(0.25);
+		msg.desired_poses.at("RSoftHand").p.y(-0.25);
+	}
+	else if(cmd=="com_on_right")
+	{
+		msg.desired_poses.at("COM").p.x(0.0);
+		msg.desired_poses.at("COM").p.y(0.0);
+		msg.desired_poses.at("LSoftHand").p.y(0.25);
+		msg.desired_poses.at("RSoftHand").p.y(-0.25);
+	}
+
+	IK.set_desired_wb_poses_as_current(current_chain);
 	
 	for(auto pose:msg.desired_poses) traj_gens.at(pose.first).line_initialize(duration,initial_poses.at(pose.first),pose.second);
+	traj_gens.at("COM").line_initialize(duration,initial_poses.at("COM"),msg.desired_poses.at("COM"));
 	
 	done=false;
 
@@ -203,7 +255,7 @@ void wholebody_ik_wb_thread::control_law()
 {
     time = time + get_thread_period()/1000.0;
 
-	if(initialized && !done)
+	if(initialized.at(current_chain) && !done)
 	{
 		if(time>duration)
 		{
@@ -216,14 +268,14 @@ void wholebody_ik_wb_thread::control_law()
 		for(auto traj_gen:traj_gens)
 			traj_gen.second.line_trajectory(time,next_poses[traj_gen.first],next_twist);
 
-		IK.set_desired_wb_poses(chain,next_poses);
+		IK.set_desired_wb_poses(current_chain,next_poses);
 
 		yarp::sig::Vector out(output.size(),0.0);
-		double cart_error = IK.cartToJnt(chain,input,out,0.005);
+		double cart_error = IK.cartToJnt(current_chain,input,out,0.005);
 
 		if(cart_error==-1)
 		{
-			std::cout<<" !! ERROR in IK !! ( "<<chain<<" ) -> I won't move."<<std::endl;
+			std::cout<<" !! ERROR in IK !! ( "<<current_chain<<" ) -> I won't move."<<std::endl;
 			done=true;
 			return;
 		}

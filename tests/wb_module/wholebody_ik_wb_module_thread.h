@@ -61,15 +61,17 @@ namespace walkman
         double time = 0;
         double duration = 3.0;
 
-		std::string chain;
-		std::string base_frame;
-		int base_index;
+		std::vector<std::string> chains;
+		std::map<std::string,std::string> base_frames;
+		std::map<std::string,int> base_indeces;
+		std::string current_chain;
+
 		std::vector<std::string> ee_names;
 		std::map<std::string,int> ee_indeces;
 		std::map<std::string,KDL::Frame> initial_poses;
 		std::map<std::string,KDL::Frame> next_poses;
 		std::map<std::string,trajectory_generator> traj_gens;
-		bool initialized = false;
+		std::map<std::string,bool> initialized;
 		bool done = false;
     public:
         /**
