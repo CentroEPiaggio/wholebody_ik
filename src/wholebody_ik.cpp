@@ -684,7 +684,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 			ee_d = locoman::utils::getRot(cur_T_des);
 			Eo = locoman::utils::Orient_Error(ee_d, Eye_3);
 			math_utilities::vectorYARPToEigen(Eo,temp);
-			d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num+3,0) = 0.2*temp;
+			d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num+3,0) = temp;
         }
 
         if(!data->first_step) data->car_err= d_C.norm();
@@ -698,8 +698,8 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
         {
 			Eigen::MatrixXd pinvJ = Eigen::Matrix<double,WB_DOFS,FULL_DIM>();
 
-			pinvJ = math_utilities::pseudoInverseDamped(data->jacobian,0.1);
-
+			pinvJ = math_utilities::pseudoInverse(data->jacobian, 1E-8);
+			
 			full_d_q = pinvJ* d_C/d_t;
 
             d_q.block<WB_DOFS-FLOATING_BASE_DOFS,1>(0,0) = full_d_q.block<WB_DOFS-FLOATING_BASE_DOFS,1>(6,0);
@@ -710,11 +710,10 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
             std::cout<<"converged"<<std::endl;
         }
     }
-
+    
     for(int i = 0;i<WB_DOFS-FLOATING_BASE_DOFS;i++)
     {
-//         out[i] = d_q(i);
-        out[i] = std::min(std::max(d_q(i),-0.1),0.1);
+         out[i] = d_q(i);
     }
 
     return out;
