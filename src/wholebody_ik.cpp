@@ -421,8 +421,6 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
     if(!data->wb) data->idynutils.fromRobotToIDyn(q_input,q_all,*data->kin_chain);
     else q_all=q_input;
     data->idynutils.updateiDyn3Model(q_all,true);
-    int e_index = 0;
-    int b_index = 0;
 
     //
     // ------ transforming the Jacobian in {B}
@@ -449,7 +447,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
             std::cout<<" !! ERROR : UNABLE TO GET COM JACOBIAN !! "<<std::endl;
             return out;
         }
-        yarp::sig::Matrix w_T_b = data->idynutils.iDyn3_model.getPosition(b_index);
+        yarp::sig::Matrix w_T_b = data->idynutils.iDyn3_model.getPosition(base_index);
 	yarp::sig::Vector null_vec(3,0.0);
 	yarp::sig::Matrix b_Tr_w = locoman::utils::Homogeneous(locoman::utils::getRot(locoman::utils::iHomogeneous(w_T_b)),null_vec); // only rotation
 	yarp::sig::Matrix b_J_com = locoman::utils::Adjoint(b_Tr_w) * w_J_com;
@@ -511,6 +509,8 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 	// | JRH  |
 	// | JLF  |
 	// | JRF  |
+		
+		// matrix.block<p,q>(i,j) = Block of size (p,q), starting at (i,j)
         data->jacobian.block<COM_DIM,WB_DOFS>(0,0) = com_jac.block<COM_DIM,WB_DOFS>(0,0); // removing orientation part :3
         data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM,0) = lh_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
         data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + CARTESIAN_DIM,0) = rh_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
@@ -519,8 +519,8 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
     }
     else //NOT WB
     {
-        e_index = data->idynutils.iDyn3_model.getLinkIndex(data->get_ee_link());
-        b_index = data->idynutils.iDyn3_model.getLinkIndex(data->get_base_link());
+        int e_index = data->idynutils.iDyn3_model.getLinkIndex(data->get_ee_link());
+        int b_index = data->idynutils.iDyn3_model.getLinkIndex(data->get_base_link());
 
         if(!data->idynutils.iDyn3_model.getRelativeJacobian(e_index,b_index,e_J_be))
         {
@@ -543,6 +543,8 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 
     if(!data->wb) // NOT WB
     {
+		int e_index = data->idynutils.iDyn3_model.getLinkIndex(data->get_ee_link());
+		int b_index = data->idynutils.iDyn3_model.getLinkIndex(data->get_base_link());
         //
         // ------ transforming the ee position in {B}
         //
