@@ -684,7 +684,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 
         Eigen::MatrixXd full_d_q = Eigen::Matrix<double,WB_DOFS,1>();
 
-        if (true) // !cartesian_action_completed(chain,precision)) - TODO FIX stop criterion
+        if (!cartesian_action_completed(chain,precision)) // NOTE maybe not the best stop criterion
         {
 			Eigen::MatrixXd pinvJ = Eigen::Matrix<double,WB_DOFS,4*CARTESIAN_DIM>();
 

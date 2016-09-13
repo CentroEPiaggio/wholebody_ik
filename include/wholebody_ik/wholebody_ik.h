@@ -167,7 +167,7 @@ public:
      * @param precision tolerance to check if the algorithm has reached the goal configuration.
      * @return -1 if errors occur (initialization or others). Carterian error if success.
      */
-    double cartToJnt(std::string chain, const yarp::sig::Vector& q_input, yarp::sig::Vector& q_out,double precision=0.04);
+    double cartToJnt(std::string chain, const yarp::sig::Vector& q_input, yarp::sig::Vector& q_out,double precision=0.005);
     
     /**
      * cartesian_action_completed
