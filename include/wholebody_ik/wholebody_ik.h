@@ -198,6 +198,11 @@ private:
      * \brief Period of the thread that is using this class (seconds) used for IK loop.
      */
     double d_t=1;
+	
+	/**
+	 * FIXME
+	 */
+	yarp::sig::Vector get_com_position_wrt_base_frame(std::string chain, int base_index);
 };
 
 #endif //WHOLEBODY_IK_H

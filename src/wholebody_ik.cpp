@@ -318,6 +318,18 @@ void wholebody_ik::set_desired_ee_pose_as_current(std::string chain)
     chains.at(chain)->set=true;
 }
 
+yarp::sig::Vector wholebody_ik::get_com_position_wrt_base_frame(std::string chain, int base_index)
+{
+	yarp::sig::Vector w_p_com = chains.at(chain)->idynutils.iDyn3_model.getCOM();
+	yarp::sig::Matrix w_T_b = chains.at(chain)->idynutils.iDyn3_model.getPosition(base_index);
+	yarp::sig::Matrix b_R_w = locoman::utils::getRot(locoman::utils::iHomogeneous(w_T_b)); // only rotation
+	yarp::sig::Vector b_p_com_w = b_R_w * w_p_com; // COM w.r.t. World but expressed in base_frame
+	yarp::sig::Vector b_p_w = locoman::utils::getTrasl(locoman::utils::iHomogeneous(w_T_b));
+	yarp::sig::Vector b_p_com = b_p_w + b_p_com_w;
+
+	return b_p_com;
+}
+
 double wholebody_ik::get_error(std::string chain)
 {
     return chains.at(chain)->car_err;
