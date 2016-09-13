@@ -154,11 +154,11 @@ int main(int argc, char** argv)
     IK.set_desired_wb_poses_as_current(chain);
     IK.get_desired_wb_poses(chain,initial_poses);
 
-    desired_poses["RSoftHand"] = initial_poses.at("RSoftHand") * KDL::Frame(KDL::Rotation::Identity(), KDL::Vector(0.1,0,0));
-    desired_poses["LSoftHand"] = initial_poses.at("LSoftHand");
-    desired_poses["r_sole"] = initial_poses.at("r_sole");
-    desired_poses["l_sole"] = initial_poses.at("l_sole");
-    desired_poses["COM"] = initial_poses.at("COM");
+    desired_poses["RSoftHand"] = initial_poses.at("RSoftHand")* KDL::Frame(KDL::Rotation::RPY(0,0,0.5), KDL::Vector(0,0,0));
+	desired_poses["LSoftHand"] = initial_poses.at("LSoftHand")* KDL::Frame(KDL::Rotation::RPY(0,0,0), KDL::Vector(0.1,0,0));
+	desired_poses["r_sole"] = initial_poses.at("r_sole")* KDL::Frame(KDL::Rotation::RPY(0,0,0), KDL::Vector(0,0,0.1));
+    desired_poses["l_sole"] = initial_poses.at("l_sole");//* KDL::Frame(KDL::Rotation::RPY(0,0,0), KDL::Vector(0,0,0.1));
+    desired_poses["COM"] = initial_poses.at("COM")* KDL::Frame(KDL::Rotation::RPY(0,0,0), KDL::Vector(0,0,0.05));
 
     for(auto pose:desired_poses)
     {
@@ -183,35 +183,36 @@ int main(int argc, char** argv)
 
         for(auto& traj_gen:traj_gens)
         {
-            traj_gen.second.line_trajectory(secs,next_poses[traj_gen.first],next_twist);
+            traj_gen.second.line_trajectory(traj_duration,next_poses[traj_gen.first],next_twist);
             vutils.set_data(next_poses.at(traj_gen.first), joints.at(chain), chain);
         }
 
         IK.set_desired_wb_poses(chain,next_poses);
 
-        cart_error = IK.cartToJnt(chain,q_sense.at(chain),q_out.at(chain));
+		int steps=0;
+		while(1)
+		{
+			q_out.at(chain) = q_sense.at(chain) + IK.next_step(chain,q_sense.at(chain),0.005)*s_period;
 
-        if(cart_error==-1) std::cout<<" -- NOT CONVERGED: "<<chain<<std::endl;
+			for(int i=0;i<q_out.at(chain).size();i++)
+			{
+				joints.at(chain).at(i) = q_out.at(chain)[i];
+			}
 
-        for(int i=0;i<q_out.at(chain).size();i++)
-        {
-            joints.at(chain).at(i) = q_out.at(chain)[i];
-        }
+			for(auto& pose:desired_poses)
+			{
+				vutils.set_data(next_poses.at(pose.first), joints.at(chain), chain);
+			}
 
-        q_sense.at(chain) = q_out.at(chain);
+			q_sense.at(chain) = q_out.at(chain);
 
-        usleep(50000);
+			usleep(s_period*1000000);
+			steps++;
+			std::cout<<"["<<steps<<"] - err: "<<IK.get_error(chain)<<std::endl;
 
-        if (secs > traj_duration)
-        {
-            start = ros::Time::now();
-            secs=0;
-
-            for(auto& q_s:q_sense)
-            {
-                q_s.second=q_init.at(q_s.first); //restarting
-            }
-        }
+			if(steps==1) getchar();
+			if(steps%1000==0) getchar();
+		}
 
         exp = ros::Time::now()-start;
     }
