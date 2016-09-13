@@ -660,20 +660,22 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 
         for(int limb_num=0;limb_num<4;limb_num++)
         {
-	    yarp::sig::Matrix b_T_ee_cur = data->idynutils.iDyn3_model.getPosition(base_index,ee_index.at(limb_num));
-	    yarp::sig::Matrix b_T_ee_des(4,4);
-	    math_utilities::FrameKDLToYARP(data->desired_poses.at(ee_names.at(limb_num)),b_T_ee_des);
+			yarp::sig::Matrix f_T_ee_cur = data->idynutils.iDyn3_model.getPosition(ee_index.at(limb_num));
+			yarp::sig::Matrix f_T_b = data->idynutils.iDyn3_model.getPosition(base_index);
+			yarp::sig::Matrix b_T_ee_cur = locoman::utils::iHomogeneous(f_T_b) * f_T_ee_cur;
 
-	    yarp::sig::Matrix cur_T_des = locoman::utils::iHomogeneous(b_T_ee_cur) * b_T_ee_des;
-	    math_utilities::vectorYARPToEigen(locoman::utils::getTrasl(cur_T_des),temp);
-            d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num,0) = temp;
+			yarp::sig::Matrix b_T_ee_des(4,4);
+			math_utilities::FrameKDLToYARP(data->desired_poses.at(ee_names.at(limb_num)),b_T_ee_des);
 
-	    ee_d = locoman::utils::getRot(cur_T_des);
-            Eo = locoman::utils::Orient_Error(ee_d, Eye_3);
-            math_utilities::vectorYARPToEigen(Eo,temp);
-            d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num+3,0) = temp;
+			yarp::sig::Matrix cur_T_des = locoman::utils::iHomogeneous(b_T_ee_cur) * b_T_ee_des;
+			math_utilities::vectorYARPToEigen(locoman::utils::getTrasl(cur_T_des),temp);
+			d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num,0) = temp;
+
+			ee_d = locoman::utils::getRot(cur_T_des);
+			Eo = locoman::utils::Orient_Error(ee_d, Eye_3);
+			math_utilities::vectorYARPToEigen(Eo,temp);
+			d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num+3,0) = 0.2*temp;
         }
-
 
         if(!data->first_step) data->car_err= d_C.norm();
         else data->first_step = false;
@@ -682,13 +684,13 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 
         Eigen::MatrixXd full_d_q = Eigen::Matrix<double,WB_DOFS,1>();
 
-        if (!cartesian_action_completed(chain,precision))
+        if (true) // !cartesian_action_completed(chain,precision)) - TODO FIX stop criterion
         {
-            Eigen::MatrixXd pinvJ = Eigen::Matrix<double,WB_DOFS,FULL_DIM>();
+			Eigen::MatrixXd pinvJ = Eigen::Matrix<double,WB_DOFS,4*CARTESIAN_DIM>();
 
-            pinvJ = math_utilities::pseudoInverseQR_3727(data->jacobian);
+			pinvJ = math_utilities::pseudoInverseDamped(data->jacobian,0.1);
 
-            full_d_q = pinvJ* d_C/d_t;
+			full_d_q = pinvJ* d_C/d_t;
 
             d_q.block<WB_DOFS-FLOATING_BASE_DOFS,1>(0,0) = full_d_q.block<WB_DOFS-FLOATING_BASE_DOFS,1>(6,0);
         }
