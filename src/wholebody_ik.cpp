@@ -230,12 +230,8 @@ void wholebody_ik::set_desired_wb_poses_as_current(std::string chain)
         }
         else
         {
-	    yarp::sig::Vector w_p_com = chains.at(chain)->idynutils.iDyn3_model.getCOM();
-	    yarp::sig::Matrix w_T_b = chains.at(chain)->idynutils.iDyn3_model.getPosition(base_index);
-	    yarp::sig::Matrix b_R_w = locoman::utils::getRot(locoman::utils::iHomogeneous(w_T_b)); // only rotation
-	    yarp::sig::Vector b_p_com = b_R_w * w_p_com;
-	    KDL::Vector com;
-	    math_utilities::vectorYARPToKDL(b_p_com,com);
+			KDL::Vector com;
+			math_utilities::vectorYARPToKDL(get_com_position_wrt_base_frame(chain,base_index),com);
             pose.second = KDL::Frame(KDL::Rotation::Identity(), com);
         }
     }
@@ -650,13 +646,8 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
         Eigen::Vector3d temp;
         yarp::sig::Matrix ee_d(3,3);
 
-        yarp::sig::Vector w_p_com = data->idynutils.iDyn3_model.getCOM();
-	yarp::sig::Matrix w_T_b = data->idynutils.iDyn3_model.getPosition(b_index);
-	yarp::sig::Matrix b_R_w = locoman::utils::getRot(locoman::utils::iHomogeneous(w_T_b)); // only rotation
-	yarp::sig::Vector b_p_com = b_R_w * w_p_com;
-
 	KDL::Vector com_pos;
-	math_utilities::vectorYARPToKDL(b_p_com,com_pos);
+	math_utilities::vectorYARPToKDL(get_com_position_wrt_base_frame(chain,base_index),com_pos);
 
         math_utilities::vectorKDLToEigen((data->desired_poses.at("COM").p - com_pos), temp);
         d_C.block<COM_DIM,1>(0,0) = temp;
