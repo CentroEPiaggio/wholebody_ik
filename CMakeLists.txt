@@ -154,3 +154,18 @@ TARGET_LINK_LIBRARIES(wholebody_ik_module wholebody_ik_lib ${iDynTree_LIBRARIES}
                                       )
 
 install(TARGETS wholebody_ik_module DESTINATION bin)
+
+# another control module
+ADD_EXECUTABLE(wholebody_ik_wb_module tests/wb_module/wholebody_ik_wb_module_main.cpp 
+                               tests/wb_module/wholebody_ik_wb_module_thread.cpp
+                               )
+
+                               
+TARGET_LINK_LIBRARIES(wholebody_ik_wb_module wholebody_ik_lib ${iDynTree_LIBRARIES}
+                                      ${YARP_LIBRARIES}
+                                      ${idynutils_LIBRARIES}
+                                      ${GYM_LIBRARIES}
+                                      ${trajectory_generator_LIBRARIES}
+                                      )
+
+install(TARGETS wholebody_ik_wb_module DESTINATION bin)
