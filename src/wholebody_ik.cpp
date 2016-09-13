@@ -698,7 +698,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
         {
 			Eigen::MatrixXd pinvJ = Eigen::Matrix<double,WB_DOFS,FULL_DIM>();
 
-			pinvJ = math_utilities::pseudoInverse(data->jacobian, 1E-8);
+			pinvJ = math_utilities::pseudoInverseDamped(data->jacobian, 0.1);
 			
 			full_d_q = pinvJ* d_C/d_t;
 
