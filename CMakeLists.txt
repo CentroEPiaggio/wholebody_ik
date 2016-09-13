@@ -69,7 +69,7 @@ FIND_PACKAGE(trajectory_generator REQUIRED)
 
 file(GLOB_RECURSE HEADER_FILES "${CMAKE_CURRENT_SOURCE_DIR}/include" *.h)
 
-include_directories(include include/wholebody_ik/)
+include_directories(include include/wholebody_ik/ include/utils/)
 
 # add include directories
 INCLUDE_DIRECTORIES( ${EIGEN3_INCLUDE_DIR} 
@@ -108,7 +108,7 @@ install(TARGETS wholebody_ik_lib
 target_include_directories(wholebody_ik_lib PUBLIC "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>"
                                                "$<INSTALL_INTERFACE:${${VARS_PREFIX}_INSTALL_INCLUDEDIR}>")
 
-add_executable(com_ik_test tests/com_ik_test.cpp tests/visual_utils.cpp)
+add_executable(com_ik_test tests/com_ik_test.cpp tests/visual_utils.cpp src/utils.cpp)
 TARGET_LINK_LIBRARIES(com_ik_test wholebody_ik_lib ${roscpp_LIBRARIES} ${tf_LIBRARIES} ${tf_conversions_LIBRARIES} ${trajectory_generator_LIBRARIES})
 
 add_executable(limbs_ik_test tests/limbs_ik_test.cpp tests/visual_utils.cpp)
