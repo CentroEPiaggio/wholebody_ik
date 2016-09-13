@@ -686,7 +686,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 
         if (!cartesian_action_completed(chain,precision)) // NOTE maybe not the best stop criterion
         {
-			Eigen::MatrixXd pinvJ = Eigen::Matrix<double,WB_DOFS,4*CARTESIAN_DIM>();
+			Eigen::MatrixXd pinvJ = Eigen::Matrix<double,WB_DOFS,FULL_DIM>();
 
 			pinvJ = math_utilities::pseudoInverseDamped(data->jacobian,0.1);
 
