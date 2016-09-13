@@ -217,30 +217,30 @@ static inline void vectorKDLToYARP(const KDL::Vector& in, yarp::sig::Matrix& out
 
 static inline void matrixYARPToEigen(const yarp::sig::Matrix& in, Eigen::MatrixXd& out)
 {
-    for(int r=0;r<3;r++)
-        for(int c=0;c<3;c++)
-            out.data()[r*3+c] = in(r,c);
+    for(int r=0;r<in.rows();r++)
+        for(int c=0;c<in.cols();c++)
+            out(r,c) = in(r,c);
 }
 
 static inline void matrixEigenToYARP(const Eigen::MatrixXd& in, yarp::sig::Matrix& out)
 {
     for(int r=0;r<in.rows();r++)
         for(int c=0;c<in.cols();c++)
-            out(r,c)=in.data()[r*in.cols()+c];
+            out(r,c)=in(r,c);
 }
 
 static inline void rotationKDLToYarp(const KDL::Rotation& in, yarp::sig::Matrix& out)
 {
     for(int r=0;r<3;r++)
         for(int c=0;c<3;c++)
-            out.data()[r*3+c] = in(r,c);
+            out(r,c) = in(r,c);
 }
 
 static inline void rotationYARPToKDL(const yarp::sig::Matrix& in, KDL::Rotation& out)
 {
     for(int r=0;r<3;r++)
         for(int c=0;c<3;c++)
-            out(r,c) = in.data()[r*3+c];
+            out(r,c) = in(r,c);
 }
 
 static inline void FrameYARPToKDL(const yarp::sig::Matrix& in, KDL::Frame& out)
