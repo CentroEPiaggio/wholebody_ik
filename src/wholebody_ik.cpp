@@ -173,7 +173,7 @@ bool wholebody_ik::initialize(std::string chain, const yarp::sig::Vector& q_inpu
     yarp::sig::Vector q_all(data->idynutils.getJointNames().size(),0.0);
     if(!data->wb) data->idynutils.fromRobotToIDyn(q_input,q_all,*data->kin_chain);
     else q_all=q_input;
-    data->idynutils.updateiDyn3Model(q_all,false);
+    data->idynutils.updateiDyn3Model(q_all,true);
 
     int dofs = data->get_dofs();
     int dim;
@@ -424,8 +424,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
     yarp::sig::Vector q_all(data->idynutils.getJointNames().size(),0.0);
     if(!data->wb) data->idynutils.fromRobotToIDyn(q_input,q_all,*data->kin_chain);
     else q_all=q_input;
-    data->idynutils.updateiDyn3Model(q_all,false);
-
+    data->idynutils.updateiDyn3Model(q_all,true);
     int e_index = 0;
     int b_index = 0;
 
