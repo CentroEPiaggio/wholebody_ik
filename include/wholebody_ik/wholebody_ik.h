@@ -189,7 +189,9 @@ private:
     void warn_not_initialized(std::string str);
     void warn_desired_not_set(std::string str);
     void print_eigen_matrix(const Eigen::MatrixXd& data);
+	void print_eigen_matrix_ndigits(const Eigen::MatrixXd& data, int n=2);
     void print_YARP_matrix(const yarp::sig::Matrix& data);
+	void print_YARP_matrix_ndigits(const yarp::sig::Matrix& data, int n=2);
 
     /**
      * T

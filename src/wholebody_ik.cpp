@@ -108,6 +108,18 @@ void wholebody_ik::print_eigen_matrix(const Eigen::MatrixXd& data)
     }
 }
 
+void wholebody_ik::print_eigen_matrix_ndigits(const Eigen::MatrixXd& data, int n)
+{
+	for(int i=0;i<data.rows();i++)
+	{
+		for(int j=0;j<data.cols();j++)
+		{
+			std::cout<<((int)(data(i,j)*pow(10,n)))/pow(10,n)<<' ';
+		}
+		std::cout<<std::endl;
+	}
+}
+
 void wholebody_ik::print_YARP_matrix(const yarp::sig::Matrix& data)
 {
     for(int i=0;i<data.rows();i++)
@@ -118,6 +130,18 @@ void wholebody_ik::print_YARP_matrix(const yarp::sig::Matrix& data)
         }
         std::cout<<std::endl;
     }
+}
+
+void wholebody_ik::print_YARP_matrix_ndigits(const yarp::sig::Matrix& data, int n)
+{
+	for(int i=0;i<data.rows();i++)
+	{
+		for(int j=0;j<data.cols();j++)
+		{
+			std::cout<<((int)(data[i][j]*pow(10,n)))/pow(10,n)<<' ';
+		}
+		std::cout<<std::endl;
+	}
 }
 
 void wholebody_ik::warn_not_initialized(std::string str)
