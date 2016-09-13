@@ -61,8 +61,8 @@ visual_utils(std::string e_frame, std::string base_frame, std::vector<std::strin
     joints.name.push_back("RAnkSag");
     joints.name.push_back("RAnkLat");
 
+	joints.name.push_back("WaistLat");
     joints.name.push_back("WaistSag");
-    joints.name.push_back("WaistLat");
     joints.name.push_back("WaistYaw");
     
     left_arm_index = joints.name.size();
