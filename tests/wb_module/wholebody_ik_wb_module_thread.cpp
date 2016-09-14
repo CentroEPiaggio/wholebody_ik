@@ -96,6 +96,7 @@ control_thread( module_prefix, rf, ph ), recv_interface("wb_interface"), IK(get_
 	}
 	traj_gens["COM"];
 
+	available_commands.push_back("poses");
 	available_commands.push_back("hands_up");
 	available_commands.push_back("hands_down");
 	available_commands.push_back("hands_forward");
@@ -143,7 +144,7 @@ bool wholebody_ik_wb_thread::generate_poses_from_cmd(std::string cmd)
         return false;
     }
 
-    if(cmd=="com_on_left")
+	if(cmd=="com_on_left")
 	{
 		current_chain = "wb_left";
 	}
@@ -152,58 +153,61 @@ bool wholebody_ik_wb_thread::generate_poses_from_cmd(std::string cmd)
 		current_chain = "wb_right";
 	}
 	
-    if(!initialized.at(current_chain))
+	if(!initialized.at(current_chain))
 	{
 		IK.initialize(current_chain,input);
 		initialized.at(current_chain)=true;
 	}
 
-    double offset_x=0;
-    double offset_y=0;
-    double offset_z=0;
-
-    if(cmd=="hands_up") offset_z=0.1;
-    else if(cmd=="hands_down") offset_z=-0.1;
-    else if(cmd=="hands_forward") offset_x=0.1;
-    else if(cmd=="hands_backward") offset_x=-0.1;
-    else if(cmd=="hands_wide") offset_y=-0.1;
-    else if(cmd=="hands_tight") offset_y=0.1;
-
 	IK.get_current_wb_poses(current_chain,initial_poses);
 
-	msg.desired_poses["LSoftHand"] = initial_poses.at("LSoftHand") * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(offset_z,-offset_y,-offset_x)); // :3
-	msg.desired_poses["RSoftHand"] = initial_poses.at("RSoftHand") * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(offset_z,offset_y,-offset_x));
-	msg.desired_poses["l_sole"] = initial_poses.at("l_sole");
-	msg.desired_poses["r_sole"] = initial_poses.at("r_sole");
-
-	double com_offset_x=0;
-	double com_offset_y=0;
-	double com_offset_z=0;
-
-	if(cmd=="com_up") com_offset_z=0.1;
-	else if(cmd=="com_down") com_offset_z=-0.1;
-	
-	msg.desired_poses["COM"] = initial_poses.at("COM") * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(com_offset_x,com_offset_y,com_offset_z));
-
-	if(cmd=="com_on_left")
+	if(cmd!="poses")
 	{
-		msg.desired_poses.at("COM").p.x(0.0);
-		msg.desired_poses.at("COM").p.y(-0.04);
-		msg.desired_poses.at("LSoftHand").p.y(0.35);
-		msg.desired_poses.at("RSoftHand").p.y(-0.35);
-	}
-	else if(cmd=="com_on_right")
-	{
-		msg.desired_poses.at("COM").p.x(0.0);
-		msg.desired_poses.at("COM").p.y(0.04);
-		msg.desired_poses.at("LSoftHand").p.y(0.35);
-		msg.desired_poses.at("RSoftHand").p.y(-0.35);
+		double offset_x=0;
+		double offset_y=0;
+		double offset_z=0;
+
+		if(cmd=="hands_up") offset_z=0.1;
+		else if(cmd=="hands_down") offset_z=-0.1;
+		else if(cmd=="hands_forward") offset_x=0.1;
+		else if(cmd=="hands_backward") offset_x=-0.1;
+		else if(cmd=="hands_wide") offset_y=-0.1;
+		else if(cmd=="hands_tight") offset_y=0.1;
+
+		msg.desired_poses["LSoftHand"] = initial_poses.at("LSoftHand") * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(offset_z,-offset_y,-offset_x)); // :3
+		msg.desired_poses["RSoftHand"] = initial_poses.at("RSoftHand") * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(offset_z,offset_y,-offset_x));
+		msg.desired_poses["l_sole"] = initial_poses.at("l_sole");
+		msg.desired_poses["r_sole"] = initial_poses.at("r_sole");
+
+		double com_offset_x=0;
+		double com_offset_y=0;
+		double com_offset_z=0;
+
+		if(cmd=="com_up") com_offset_z=0.1;
+		else if(cmd=="com_down") com_offset_z=-0.1;
+		
+		msg.desired_poses["COM"] = initial_poses.at("COM") * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(com_offset_x,com_offset_y,com_offset_z));
+
+		if(cmd=="com_on_left")
+		{
+			msg.desired_poses.at("COM").p.x(0.0);
+			msg.desired_poses.at("COM").p.y(-0.04);
+			msg.desired_poses.at("LSoftHand").p.y(0.35);
+			msg.desired_poses.at("RSoftHand").p.y(-0.35);
+		}
+		else if(cmd=="com_on_right")
+		{
+			msg.desired_poses.at("COM").p.x(0.0);
+			msg.desired_poses.at("COM").p.y(0.04);
+			msg.desired_poses.at("LSoftHand").p.y(0.35);
+			msg.desired_poses.at("RSoftHand").p.y(-0.35);
+		}
 	}
 
 	IK.set_desired_wb_poses_as_current(current_chain);
-	
+
 	for(auto pose:msg.desired_poses) traj_gens.at(pose.first).line_initialize(duration,initial_poses.at(pose.first),pose.second);
-	traj_gens.at("COM").line_initialize(duration,initial_poses.at("COM"),msg.desired_poses.at("COM"));
+	if(msg.desired_poses.count("COM")) traj_gens.at("COM").line_initialize(duration,initial_poses.at("COM"),msg.desired_poses.at("COM"));
 	
 	done=false;
 
@@ -226,12 +230,11 @@ void wholebody_ik_wb_thread::run()
         }
         else
         {
-            if(msg.command!="poses") 
-				if(!generate_poses_from_cmd(msg.command))
-				{
-					std::cout<<"Received malformed command, abort"<<std::endl;
-					return;
-				}
+			if(!generate_poses_from_cmd(msg.command))
+			{
+				std::cout<<"Received malformed command, abort"<<std::endl;
+				return;
+			}
 
             time=0;
         }
@@ -263,7 +266,10 @@ void wholebody_ik_wb_thread::control_law()
 		KDL::Twist next_twist;
 		
 		for(auto traj_gen:traj_gens)
-			traj_gen.second.line_trajectory(time,next_poses[traj_gen.first],next_twist);
+		{
+			if(msg.desired_poses.count(traj_gen.first))
+				traj_gen.second.line_trajectory(time,next_poses[traj_gen.first],next_twist);
+		}
 
 		IK.set_desired_wb_poses(current_chain,next_poses);
 
@@ -282,9 +288,9 @@ void wholebody_ik_wb_thread::control_law()
 
     if(going_to_initial_position)
     {
-        double alpha = (time>3)?1:time/3.0;
+        double alpha = (time>5.0)?1:time/5.0;
         output = (1-alpha)*q_init + (alpha)*home;
-        if(time>3)
+        if(time>5.0)
         {
             going_to_initial_position = false;
             std::cout<<" - Ready"<<std::endl;
