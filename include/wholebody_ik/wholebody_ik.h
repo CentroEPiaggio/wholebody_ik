@@ -99,6 +99,11 @@ public:
     wholebody_ik(std::string robot_name,std::string urdf_path, std::string srdf_path,int period_ms);
     ~wholebody_ik();
 
+	/**
+	 * FIXME
+	 */
+	void update_model(std::string chain, const yarp::sig::Vector& q_input);
+
     /**
     * initialize
     * \brief Initialize a kinematic chain with a desired cartesian position.

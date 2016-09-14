@@ -154,6 +154,16 @@ void wholebody_ik::warn_desired_not_set(std::string str)
     std::cout<<yellow(" --------------- WARNING NEVER SET DESIRED POSE FOR '" + str + "'--------------- ")<<std::endl;
 }
 
+void wholebody_ik::update_model(std::string chain, const yarp::sig::Vector& q_input)
+{
+	if(!chains.at(chain)->initialized) {warn_not_initialized(chain); return;}
+
+	yarp::sig::Vector q_all(chains.at(chain)->idynutils.getJointNames().size(),0.0);
+	if(!chains.at(chain)->wb) chains.at(chain)->idynutils.fromRobotToIDyn(q_input,q_all,*chains.at(chain)->kin_chain);
+	else q_all=q_input;
+	chains.at(chain)->idynutils.updateiDyn3Model(q_all,true);
+}
+
 bool wholebody_ik::initialize(std::string chain, const yarp::sig::Vector& q_input)
 {
     if(!chains.count(chain))
@@ -169,11 +179,6 @@ bool wholebody_ik::initialize(std::string chain, const yarp::sig::Vector& q_inpu
         std::cout<<red("!! - Error in setting floating base - !!")<<std::endl;
         return false;
     }
-
-    yarp::sig::Vector q_all(data->idynutils.getJointNames().size(),0.0);
-    if(!data->wb) data->idynutils.fromRobotToIDyn(q_input,q_all,*data->kin_chain);
-    else q_all=q_input;
-    data->idynutils.updateiDyn3Model(q_all,true);
 
     int dofs = data->get_dofs();
     int dim;
@@ -197,6 +202,8 @@ bool wholebody_ik::initialize(std::string chain, const yarp::sig::Vector& q_inpu
     data->jacobian.setZero();
     
     data->initialized = true;
+
+	update_model(chain,q_input);
 
     std::cout<<green("=---------------------------")<<std::endl;
     std::cout<<green(" WholeBody IK Library initialized. Created a "+ std::to_string(dim) + "x" + std::to_string(dofs) + " Jacobian (" + chain + ")")<<std::endl;
@@ -427,10 +434,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
     if(!data->wb) out.resize(dofs ,0.0);
     Eigen::MatrixXd d_q;
 
-    yarp::sig::Vector q_all(data->idynutils.getJointNames().size(),0.0);
-    if(!data->wb) data->idynutils.fromRobotToIDyn(q_input,q_all,*data->kin_chain);
-    else q_all=q_input;
-    data->idynutils.updateiDyn3Model(q_all,true);
+	update_model(chain,q_input);
 
     //
     // ------ transforming the Jacobian in {B}
