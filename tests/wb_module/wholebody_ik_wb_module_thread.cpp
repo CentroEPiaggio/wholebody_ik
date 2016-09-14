@@ -93,8 +93,10 @@ control_thread( module_prefix, rf, ph ), recv_interface("wb_interface"), IK(get_
 	{
 		ee_indeces.emplace(name,model.iDyn3_model.getLinkIndex(name));
 		traj_gens[name];
+		traj_types[name] = 0;
 	}
 	traj_gens["COM"];
+	traj_types["COM"] = 0;
 
 	available_commands.push_back("poses");
 	available_commands.push_back("hands_up");
@@ -107,6 +109,8 @@ control_thread( module_prefix, rf, ph ), recv_interface("wb_interface"), IK(get_
 	available_commands.push_back("com_on_right");
 	available_commands.push_back("com_up");
 	available_commands.push_back("com_down");
+
+	square_duration = duration * 3.0;
 }
 
 bool wholebody_ik_wb_thread::custom_init()
@@ -136,19 +140,24 @@ void wholebody_ik_wb_thread::go_in_initial_position()
     going_to_initial_position = true;
 }
 
-bool wholebody_ik_wb_thread::generate_poses_from_cmd(std::string cmd)
+void wholebody_ik_wb_thread::reset_traj_types()
 {
-    if( std::find(available_commands.begin(), available_commands.end(), cmd)==available_commands.end() )
+	for(auto& tt:traj_types) tt.second=0;
+}
+
+bool wholebody_ik_wb_thread::generate_poses_from_cmd()
+{
+    if( std::find(available_commands.begin(), available_commands.end(), msg.command)==available_commands.end() )
     {
         std::cout<<" !! ERROR: command not available !!"<<std::endl;
         return false;
     }
 
-	if(cmd=="com_on_left")
+    if(msg.command=="com_on_left")
 	{
 		current_chain = "wb_left";
 	}
-	if(cmd=="com_on_right")
+	if(msg.command=="com_on_right")
 	{
 		current_chain = "wb_right";
 	}
@@ -159,20 +168,21 @@ bool wholebody_ik_wb_thread::generate_poses_from_cmd(std::string cmd)
 		initialized.at(current_chain)=true;
 	}
 
+	IK.update_model(current_chain,input);
 	IK.get_current_wb_poses(current_chain,initial_poses);
 
-	if(cmd!="poses")
+	if(msg.command!="poses")
 	{
 		double offset_x=0;
 		double offset_y=0;
 		double offset_z=0;
 
-		if(cmd=="hands_up") offset_z=0.1;
-		else if(cmd=="hands_down") offset_z=-0.1;
-		else if(cmd=="hands_forward") offset_x=0.1;
-		else if(cmd=="hands_backward") offset_x=-0.1;
-		else if(cmd=="hands_wide") offset_y=-0.1;
-		else if(cmd=="hands_tight") offset_y=0.1;
+		if(msg.command=="hands_up") offset_z=0.1;
+		else if(msg.command=="hands_down") offset_z=-0.1;
+		else if(msg.command=="hands_forward") offset_x=0.1;
+		else if(msg.command=="hands_backward") offset_x=-0.1;
+		else if(msg.command=="hands_wide") offset_y=-0.1;
+		else if(msg.command=="hands_tight") offset_y=0.1;
 
 		msg.desired_poses["LSoftHand"] = initial_poses.at("LSoftHand") * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(offset_z,-offset_y,-offset_x)); // :3
 		msg.desired_poses["RSoftHand"] = initial_poses.at("RSoftHand") * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(offset_z,offset_y,-offset_x));
@@ -183,22 +193,22 @@ bool wholebody_ik_wb_thread::generate_poses_from_cmd(std::string cmd)
 		double com_offset_y=0;
 		double com_offset_z=0;
 
-		if(cmd=="com_up") com_offset_z=0.1;
-		else if(cmd=="com_down") com_offset_z=-0.1;
+		if(msg.command=="com_up") com_offset_z=0.1;
+		else if(msg.command=="com_down") com_offset_z=-0.1;
 		
 		msg.desired_poses["COM"] = initial_poses.at("COM") * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(com_offset_x,com_offset_y,com_offset_z));
 
-		if(cmd=="com_on_left")
+		if(msg.command=="com_on_left")
 		{
 			msg.desired_poses.at("COM").p.x(0.0);
-			msg.desired_poses.at("COM").p.y(-0.04);
+			msg.desired_poses.at("COM").p.y(-0.025);
 			msg.desired_poses.at("LSoftHand").p.y(0.35);
 			msg.desired_poses.at("RSoftHand").p.y(-0.35);
 		}
-		else if(cmd=="com_on_right")
+		else if(msg.command=="com_on_right")
 		{
 			msg.desired_poses.at("COM").p.x(0.0);
-			msg.desired_poses.at("COM").p.y(0.04);
+			msg.desired_poses.at("COM").p.y(0.025);
 			msg.desired_poses.at("LSoftHand").p.y(0.35);
 			msg.desired_poses.at("RSoftHand").p.y(-0.35);
 		}
@@ -206,8 +216,29 @@ bool wholebody_ik_wb_thread::generate_poses_from_cmd(std::string cmd)
 
 	IK.set_desired_wb_poses_as_current(current_chain);
 
-	for(auto pose:msg.desired_poses) traj_gens.at(pose.first).line_initialize(duration,initial_poses.at(pose.first),pose.second);
-	if(msg.desired_poses.count("COM")) traj_gens.at("COM").line_initialize(duration,initial_poses.at("COM"),msg.desired_poses.at("COM"));
+	exec_time = duration;
+
+	reset_traj_types();
+
+	for(auto pose:msg.desired_poses)
+	{
+		if(msg.command=="poses") traj_types[pose.first] = msg.traj_type;
+
+		if(traj_types.at(pose.first)==0)
+		{
+			traj_gens.at(pose.first).line_initialize(duration,initial_poses.at(pose.first),pose.second);
+		}
+		else if(traj_types.at(pose.first)==1)
+		{
+			exec_time = square_duration;
+			traj_gens.at(pose.first).square_initialize(square_duration,initial_poses.at(pose.first),pose.second);
+		}
+	}
+
+	if(msg.desired_poses.count("COM"))
+	{
+		traj_gens.at("COM").line_initialize(duration,initial_poses.at("COM"),msg.desired_poses.at("COM"));
+	}
 	
 	done=false;
 
@@ -230,7 +261,7 @@ void wholebody_ik_wb_thread::run()
         }
         else
         {
-			if(!generate_poses_from_cmd(msg.command))
+			if(!generate_poses_from_cmd())
 			{
 				std::cout<<"Received malformed command, abort"<<std::endl;
 				return;
@@ -257,7 +288,7 @@ void wholebody_ik_wb_thread::control_law()
 
 	if(initialized.at(current_chain) && !done)
 	{
-		if(time>duration)
+		if(time > exec_time)
 		{
 			std::cout<<" -- done"<<std::endl;
 			done=true;
@@ -268,7 +299,12 @@ void wholebody_ik_wb_thread::control_law()
 		for(auto traj_gen:traj_gens)
 		{
 			if(msg.desired_poses.count(traj_gen.first))
-				traj_gen.second.line_trajectory(time,next_poses[traj_gen.first],next_twist);
+			{
+				if(traj_types.at(traj_gen.first)==0)
+					traj_gen.second.line_trajectory(time,next_poses[traj_gen.first],next_twist);
+				else if(traj_types.at(traj_gen.first)==1)
+					traj_gen.second.square_trajectory(time,next_poses[traj_gen.first],next_twist);
+			}
 		}
 
 		IK.set_desired_wb_poses(current_chain,next_poses);

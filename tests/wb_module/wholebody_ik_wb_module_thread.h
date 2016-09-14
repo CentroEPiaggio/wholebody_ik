@@ -54,12 +54,14 @@ namespace walkman
         bool going_to_initial_position=false;
 
         std::vector<std::string> available_commands;
-        bool generate_poses_from_cmd(std::string cmd);
+        bool generate_poses_from_cmd();
 
         wholebody_ik IK;
 
         double time = 0;
         double duration = 5.0;
+		double square_duration;
+		double exec_time;
 
 		std::vector<std::string> chains;
 		std::map<std::string,std::string> base_frames;
@@ -71,8 +73,11 @@ namespace walkman
 		std::map<std::string,KDL::Frame> initial_poses;
 		std::map<std::string,KDL::Frame> next_poses;
 		std::map<std::string,trajectory_generator> traj_gens;
+		std::map<std::string,int> traj_types;
 		std::map<std::string,bool> initialized;
 		bool done = false;
+
+		void reset_traj_types();
     public:
         /**
         * @brief constructor
