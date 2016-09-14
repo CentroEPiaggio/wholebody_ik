@@ -29,7 +29,7 @@ using namespace yarp::sig;
 using namespace walkman;
 
 wholebody_ik_wb_thread::wholebody_ik_wb_thread( std::string module_prefix, yarp::os::ResourceFinder rf, std::shared_ptr< paramHelp::ParamHelperServer > ph):
-control_thread( module_prefix, rf, ph ), recv_interface("wb_interface"), IK(get_robot_name(),get_urdf_path(),get_srdf_path(),get_thread_period())
+control_thread( module_prefix, rf, ph ), recv_interface("multicontact_interface"), IK(get_robot_name(),get_urdf_path(),get_srdf_path(),get_thread_period())
 {
     input.resize(model.iDyn3_model.getNrOfDOFs(),0.0);
     output.resize(model.iDyn3_model.getNrOfDOFs(),0.0);
@@ -153,11 +153,11 @@ bool wholebody_ik_wb_thread::generate_poses_from_cmd()
         return false;
     }
 
-    if(msg.command=="com_on_left")
+    if(msg.command=="com_on_left" || msg.frame=="l_sole")
 	{
 		current_chain = "wb_left";
 	}
-	if(msg.command=="com_on_right")
+	if(msg.command=="com_on_right" || msg.frame=="r_sole")
 	{
 		current_chain = "wb_right";
 	}
