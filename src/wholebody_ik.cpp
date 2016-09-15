@@ -711,7 +711,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
         else
         {
             d_q.setZero();
-            std::cout<<"converged"<<std::endl;
+//             std::cout<<"converged"<<std::endl;
         }
     }
     
