@@ -109,8 +109,6 @@ control_thread( module_prefix, rf, ph ), recv_interface("multicontact_interface"
 	available_commands.push_back("com_on_right");
 	available_commands.push_back("com_up");
 	available_commands.push_back("com_down");
-
-	square_duration = duration * 3.0;
 }
 
 bool wholebody_ik_wb_thread::custom_init()
@@ -216,7 +214,7 @@ bool wholebody_ik_wb_thread::generate_poses_from_cmd()
 
 	IK.set_desired_wb_poses_as_current(current_chain);
 
-	exec_time = duration;
+	exec_time = msg.duration;
 
 	reset_traj_types();
 
@@ -226,21 +224,23 @@ bool wholebody_ik_wb_thread::generate_poses_from_cmd()
 
 		if(traj_types.at(pose.first)==0)
 		{
-			traj_gens.at(pose.first).line_initialize(duration,initial_poses.at(pose.first),pose.second);
+			traj_gens.at(pose.first).line_initialize(exec_time,initial_poses.at(pose.first),pose.second);
 		}
 		else if(traj_types.at(pose.first)==1)
 		{
-			exec_time = square_duration;
-			traj_gens.at(pose.first).square_initialize(square_duration,initial_poses.at(pose.first),pose.second);
+			exec_time = msg.duration*3;
+			traj_gens.at(pose.first).square_initialize(exec_time,initial_poses.at(pose.first),pose.second);
 		}
 	}
 
 	if(msg.desired_poses.count("COM"))
 	{
-		traj_gens.at("COM").line_initialize(duration,initial_poses.at("COM"),msg.desired_poses.at("COM"));
+		traj_gens.at("COM").line_initialize(msg.duration,initial_poses.at("COM"),msg.desired_poses.at("COM"));
 	}
 	
 	done=false;
+	
+	std::cout<<"DEBUG - framne: "<<msg.frame<<" type: "<<msg.traj_type<<" duration: "<<msg.duration<<" touch: "<<msg.touch<<std::endl;
 
     return true;
 }
