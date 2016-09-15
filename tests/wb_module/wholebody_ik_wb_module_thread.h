@@ -23,6 +23,7 @@
 
 #include <GYM/control_thread.hpp>
 #include <GYM/yarp_command_interface.hpp>
+#include <GYM/yarp_status_interface.h>
 #include <drc_shared/yarp_msgs/multicontact_msg.h>
 
 #include <wholebody_ik/wholebody_ik.h>
@@ -51,6 +52,8 @@ namespace walkman
 		multicontact_msg msg;
 		walkman::yarp_custom_command_interface<multicontact_msg> recv_interface;
         int recv_num=0;
+		walkman::yarp_status_interface status_interface;
+		int status_seq_num=0;
 
         void go_in_initial_position();
         bool going_to_initial_position=false;

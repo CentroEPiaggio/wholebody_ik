@@ -43,7 +43,7 @@ int main(int argc, char* argv[])
     rf.setDefaultContext( "wholebody_ik" );  
     rf.configure(argc, argv);
     // create my module
-	wholebody_ik_wb_module wholebody_ik_wb_mod = wholebody_ik_wb_module( argc, argv, "wholebody_ik_wb", MODULE_PERIOD, rf );
+	wholebody_ik_wb_module wholebody_ik_wb_mod = wholebody_ik_wb_module( argc, argv, "multicontact_control", MODULE_PERIOD, rf );
     
     // run the module
 	wholebody_ik_wb_mod.start();

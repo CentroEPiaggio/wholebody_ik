@@ -29,7 +29,7 @@ using namespace yarp::sig;
 using namespace walkman;
 
 wholebody_ik_wb_thread::wholebody_ik_wb_thread( std::string module_prefix, yarp::os::ResourceFinder rf, std::shared_ptr< paramHelp::ParamHelperServer > ph):
-control_thread( module_prefix, rf, ph ), recv_interface("multicontact_interface"), IK(get_robot_name(),get_urdf_path(),get_srdf_path(),get_thread_period())
+control_thread( module_prefix, rf, ph ), recv_interface("multicontact_interface"), status_interface(module_prefix), IK(get_robot_name(),get_urdf_path(),get_srdf_path(),get_thread_period())
 {
     input.resize(model.iDyn3_model.getNrOfDOFs(),0.0);
     output.resize(model.iDyn3_model.getNrOfDOFs(),0.0);
@@ -125,11 +125,16 @@ bool wholebody_ik_wb_thread::custom_init()
 	output = input = robot.sensePosition();
     robot.setPositionDirectMode();
 
-	IK.initialize(current_chain,input);
-	initialized.at(current_chain)=true;
+	IK.initialize("wb_left",input);
+	initialized.at("wb_left")=true;
+	IK.initialize("wb_right",input);
+	initialized.at("wb_right")=true;
 	done = true;
 
     std::cout<<" - Initialized"<<std::endl;
+
+	status_interface.start();
+	status_interface.setStatus("Ready",status_seq_num++);
 
     return true;
 }
@@ -281,6 +286,8 @@ void wholebody_ik_wb_thread::run()
 				return;
 			}
 
+			status_interface.setStatus(msg.command,status_seq_num++);
+
             time=0;
         }
     }
@@ -308,6 +315,7 @@ void wholebody_ik_wb_thread::control_law()
 		{
 			std::cout<<" -- done"<<std::endl;
 			done=true;
+			status_interface.setStatus("Ready",status_seq_num++);
 		}
 
 		KDL::Twist next_twist;
@@ -316,7 +324,7 @@ void wholebody_ik_wb_thread::control_law()
 		{
 			if(msg.desired_poses.count(traj_gen.first))
 			{
-				if(traj_types.at(traj_gen.first)==0)
+				if(traj_gen.first=="COM" ||  traj_types.at(traj_gen.first)==0)
 					traj_gen.second.line_trajectory(time,next_poses[traj_gen.first],next_twist);
 				else if(traj_types.at(traj_gen.first)==1)
 					traj_gen.second.square_trajectory(time,msg.height,next_poses[traj_gen.first],next_twist);
@@ -346,6 +354,7 @@ void wholebody_ik_wb_thread::control_law()
         {
             going_to_initial_position = false;
             std::cout<<" - Ready"<<std::endl;
+			status_interface.setStatus("Ready",status_seq_num++);
         }
     }
 }
