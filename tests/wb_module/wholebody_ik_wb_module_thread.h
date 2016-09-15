@@ -30,6 +30,8 @@
 
 #include <vector>
 
+#include "tf/transform_broadcaster.h"
+
 /**
  * @brief wholebody_ik wb version, control thread
  * 
@@ -76,6 +78,9 @@ namespace walkman
 		bool done = false;
 
 		void reset_traj_types();
+
+		tf::TransformBroadcaster br;
+		void broadcast_com_tf();
     public:
         /**
         * @brief constructor

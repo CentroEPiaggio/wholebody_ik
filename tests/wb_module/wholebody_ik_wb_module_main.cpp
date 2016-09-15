@@ -23,6 +23,10 @@
 
 int main(int argc, char* argv[])
 {
+	if(!ros::isInitialized())
+	{
+		ros::init(argc,argv,"wb_tf");
+	}
     // yarp network declaration and check
     yarp::os::Network yarp;
     if(!yarp.checkNetwork()){

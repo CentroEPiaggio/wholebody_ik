@@ -98,6 +98,7 @@ control_thread( module_prefix, rf, ph ), recv_interface("multicontact_interface"
 	traj_gens["COM"];
 	traj_types["COM"] = 0;
 
+	available_commands.push_back("touch");
 	available_commands.push_back("poses");
 	available_commands.push_back("hands_up");
 	available_commands.push_back("hands_down");
@@ -124,8 +125,9 @@ bool wholebody_ik_wb_thread::custom_init()
 	output = input = robot.sensePosition();
     robot.setPositionDirectMode();
 
-    // initial position
-    go_in_initial_position();
+	IK.initialize(current_chain,input);
+	initialized.at(current_chain)=true;
+	done = true;
 
     std::cout<<" - Initialized"<<std::endl;
 
@@ -218,8 +220,12 @@ bool wholebody_ik_wb_thread::generate_poses_from_cmd()
 
 	reset_traj_types();
 
+	if(msg.command=="poses") std::cout<<"Request: "<<std::endl;
+	
 	for(auto pose:msg.desired_poses)
 	{
+		if(msg.command=="poses") std::cout<<" - "<<pose.first<<std::endl;
+
 		if(msg.command=="poses") traj_types[pose.first] = msg.traj_type;
 
 		if(traj_types.at(pose.first)==0)
@@ -233,14 +239,22 @@ bool wholebody_ik_wb_thread::generate_poses_from_cmd()
 		}
 	}
 
+	if(msg.command=="touch")
+	{
+		std::cout<<"Touch: "<<std::endl;
+
+		for(auto t:msg.touch)
+		{
+			if(t.second) std::cout<<" - "<<t.first<<std::endl;
+		}
+	}
+
 	if(msg.desired_poses.count("COM"))
 	{
 		traj_gens.at("COM").line_initialize(msg.duration,initial_poses.at("COM"),msg.desired_poses.at("COM"));
 	}
 	
 	done=false;
-	
-	std::cout<<"DEBUG - framne: "<<msg.frame<<" type: "<<msg.traj_type<<" duration: "<<msg.duration<<" touch: "<<msg.touch<<std::endl;
 
     return true;
 }
@@ -280,6 +294,8 @@ void wholebody_ik_wb_thread::sense()
 {
     input = output; //robot.sensePosition();
     model.updateiDyn3Model( input, true );
+
+	broadcast_com_tf();
 }
 
 void wholebody_ik_wb_thread::control_law()
@@ -303,7 +319,7 @@ void wholebody_ik_wb_thread::control_law()
 				if(traj_types.at(traj_gen.first)==0)
 					traj_gen.second.line_trajectory(time,next_poses[traj_gen.first],next_twist);
 				else if(traj_types.at(traj_gen.first)==1)
-					traj_gen.second.square_trajectory(time,next_poses[traj_gen.first],next_twist);
+					traj_gen.second.square_trajectory(time,msg.height,next_poses[traj_gen.first],next_twist);
 			}
 		}
 
@@ -337,4 +353,16 @@ void wholebody_ik_wb_thread::control_law()
 void wholebody_ik_wb_thread::move()
 {
     robot.move(output);
+}
+
+void wholebody_ik_wb_thread::broadcast_com_tf()
+{
+	if(initialized.at(current_chain))
+	{
+		tf::Transform transform;
+		IK.get_current_wb_poses(current_chain,initial_poses);
+		tf::transformKDLToTF(initial_poses.at("COM"),transform);
+		br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), base_frames.at(current_chain), "COM"));
+		ros::spinOnce();
+	}
 }
