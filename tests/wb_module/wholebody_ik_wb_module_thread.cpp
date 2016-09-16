@@ -163,11 +163,28 @@ bool wholebody_ik_wb_thread::generate_poses_from_cmd()
         return false;
     }
 
-    if(msg.command=="com_on_left" || msg.frame=="l_sole")
+    done=false;
+
+    if(msg.command=="switch")
+	{
+		if(msg.frame=="l_sole")
+		{
+			current_chain = "wb_left";
+		}
+		if(msg.frame=="r_sole")
+		{
+			current_chain = "wb_right";
+		}
+		IK.update_model(current_chain,input);
+		done=true;
+		return true;
+	}
+
+    if(msg.command=="com_on_left")
 	{
 		current_chain = "wb_left";
 	}
-	if(msg.command=="com_on_right" || msg.frame=="r_sole")
+	if(msg.command=="com_on_right")
 	{
 		current_chain = "wb_right";
 	}
@@ -264,8 +281,6 @@ bool wholebody_ik_wb_thread::generate_poses_from_cmd()
 		traj_gens.at("COM").line_initialize(msg.duration,initial_poses.at("COM"),msg.desired_poses.at("COM"));
 	}
 	
-	done=false;
-
     return true;
 }
 
