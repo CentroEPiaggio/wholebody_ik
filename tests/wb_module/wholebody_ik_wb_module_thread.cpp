@@ -98,8 +98,7 @@ control_thread( module_prefix, rf, ph ), recv_interface("multicontact_interface"
 	traj_gens["COM"];
 	traj_types["COM"] = 0;
 
-	available_commands.push_back("touch");
-	available_commands.push_back("poses");
+
 	available_commands.push_back("hands_up");
 	available_commands.push_back("hands_down");
 	available_commands.push_back("hands_forward");
@@ -110,6 +109,12 @@ control_thread( module_prefix, rf, ph ), recv_interface("multicontact_interface"
 	available_commands.push_back("com_on_right");
 	available_commands.push_back("com_up");
 	available_commands.push_back("com_down");
+
+	for(auto cmd:available_commands) special_commands.push_back(cmd);
+
+	available_commands.push_back("switch");
+	available_commands.push_back("touch");
+	available_commands.push_back("poses");
 }
 
 bool wholebody_ik_wb_thread::custom_init()
@@ -176,7 +181,7 @@ bool wholebody_ik_wb_thread::generate_poses_from_cmd()
 	IK.update_model(current_chain,input);
 	IK.get_current_wb_poses(current_chain,initial_poses);
 
-	if(msg.command!="poses")
+	if( std::find(special_commands.begin(), special_commands.end(), msg.command)!=special_commands.end() )
 	{
 		double offset_x=0;
 		double offset_y=0;

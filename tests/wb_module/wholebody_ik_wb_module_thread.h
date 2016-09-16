@@ -59,6 +59,7 @@ namespace walkman
         bool going_to_initial_position=false;
 
         std::vector<std::string> available_commands;
+		std::vector<std::string> special_commands;
         bool generate_poses_from_cmd();
 
         wholebody_ik IK;
