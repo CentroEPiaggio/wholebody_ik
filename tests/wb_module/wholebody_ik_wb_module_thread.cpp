@@ -251,9 +251,11 @@ bool wholebody_ik_wb_thread::generate_poses_from_cmd()
 	
 	for(auto pose:msg.desired_poses)
 	{
-		if(msg.command=="poses") std::cout<<" - "<<pose.first<<std::endl;
-
-		if(msg.command=="poses") traj_types[pose.first] = msg.traj_type;
+		if(msg.command=="poses")
+		{
+			std::cout<<" - "<<pose.first<<std::endl;
+			if(pose.first!="COM") traj_types[pose.first] = msg.traj_type; //com is always linear
+		}
 
 		if(traj_types.at(pose.first)==0)
 		{
@@ -276,11 +278,8 @@ bool wholebody_ik_wb_thread::generate_poses_from_cmd()
 		}
 	}
 
-	if(msg.desired_poses.count("COM"))
-	{
-		traj_gens.at("COM").line_initialize(msg.duration,initial_poses.at("COM"),msg.desired_poses.at("COM"));
-	}
-	
+	time=0;
+
     return true;
 }
 
@@ -307,8 +306,6 @@ void wholebody_ik_wb_thread::run()
 			}
 
 			status_interface.setStatus(msg.command,status_seq_num++);
-
-            time=0;
         }
     }
 
@@ -339,7 +336,8 @@ void wholebody_ik_wb_thread::control_law()
 		}
 
 		KDL::Twist next_twist;
-		
+		next_poses.clear();
+
 		for(auto traj_gen:traj_gens)
 		{
 			if(msg.desired_poses.count(traj_gen.first))
@@ -351,6 +349,7 @@ void wholebody_ik_wb_thread::control_law()
 			}
 		}
 
+		IK.set_desired_wb_poses_as_current(current_chain);
 		IK.set_desired_wb_poses(current_chain,next_poses);
 
 		yarp::sig::Vector out(output.size(),0.0);
@@ -359,6 +358,7 @@ void wholebody_ik_wb_thread::control_law()
 		if(cart_error==-1)
 		{
 			std::cout<<" !! ERROR in IK !! ( "<<current_chain<<" ) -> I won't move."<<std::endl;
+			IK.update_model(current_chain,input); //to reset
 			done=true;
 			return;
 		}
@@ -375,6 +375,7 @@ void wholebody_ik_wb_thread::control_law()
             going_to_initial_position = false;
             std::cout<<" - Ready"<<std::endl;
 			status_interface.setStatus("Ready",status_seq_num++);
+			IK.update_model(current_chain,input); //to update
         }
     }
 }
