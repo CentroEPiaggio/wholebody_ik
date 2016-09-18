@@ -720,6 +720,8 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
          out[i] = d_q(i);
     }
 
+    out[data->idynutils.iDyn3_model.getDOFIndex("WaistLat")] = 0.0;
+
     return out;
 }
 
