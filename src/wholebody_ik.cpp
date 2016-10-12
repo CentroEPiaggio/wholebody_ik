@@ -446,11 +446,15 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
      * The CoM jacobian is expressed either w.r.t. one foot or the other
      */
     
-    std::string base_frame;
-    if(chain=="wb_left") base_frame="l_sole";
-    if(chain=="wb_right") base_frame="r_sole";
+    int base_index=0;
 
-    int base_index = data->idynutils.iDyn3_model.getLinkIndex(base_frame);
+    if(data->wb)
+    {
+        std::string base_frame;
+        if(chain=="wb_left") base_frame="l_sole";
+        if(chain=="wb_right") base_frame="r_sole";
+        base_index = data->idynutils.iDyn3_model.getLinkIndex(base_frame);
+    }
 
     if(data->wb) //WB
     {
@@ -640,7 +644,6 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
             }
 
             d_q = pinvJ* b_v_ee_desired/d_t + (In-pinvJ*data->jacobian) * (des_dq); //null projection to avoid joint limits
-
         }
         else
             d_q.setZero();
