@@ -158,10 +158,16 @@ void wholebody_ik::update_model(std::string chain, const yarp::sig::Vector& q_in
 {
 	if(!chains.at(chain)->initialized) {warn_not_initialized(chain); return;}
 
-	yarp::sig::Vector q_all(chains.at(chain)->idynutils.getJointNames().size(),0.0);
-	if(!chains.at(chain)->wb) chains.at(chain)->idynutils.fromRobotToIDyn(q_input,q_all,*chains.at(chain)->kin_chain);
-	else q_all=q_input;
-	chains.at(chain)->idynutils.updateiDyn3Model(q_all,true);
+	if(q_input.size() == chains.at(chain)->idynutils.getJointNames().size())
+	{
+	    chains.at(chain)->idynutils.updateiDyn3Model(q_input,true);
+	}
+	else
+	{
+	    yarp::sig::Vector q_all = chains.at(chain)->idynutils.iDyn3_model.getAng();
+	    chains.at(chain)->idynutils.fromRobotToIDyn(q_input,q_all,*chains.at(chain)->kin_chain);
+	    chains.at(chain)->idynutils.updateiDyn3Model(q_all,true);
+	}
 }
 
 bool wholebody_ik::initialize(std::string chain, const yarp::sig::Vector& q_input)
@@ -300,17 +306,21 @@ void wholebody_ik::get_desired_wb_poses(std::string chain, std::map<std::string,
 void wholebody_ik::get_current_ee_pose(std::string chain, KDL::Frame& cartesian_pose)
 {
     std::string frame;
+    std::string base_frame;
 
     if(chain=="right_arm") frame="RSoftHand";
     if(chain=="left_arm") frame="LSoftHand";
     if(chain=="right_leg") frame="r_sole";
     if(chain=="left_leg") frame="l_sole";
+    base_frame = chains.at(chain)->get_base_link();
 
     int link_index;
+    int base_index;
 
     link_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(frame);
+    base_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(base_frame);
 
-    cartesian_pose = chains.at(chain)->idynutils.iDyn3_model.getPositionKDL(link_index);
+    cartesian_pose = chains.at(chain)->idynutils.iDyn3_model.getPositionKDL(base_index,link_index);
 }
 
 void wholebody_ik::set_desired_ee_pose(std::string chain, KDL::Frame cartesian_pose)
@@ -361,15 +371,24 @@ double wholebody_ik::cartToJnt(std::string chain, const yarp::sig::Vector& q_inp
     if(!chains.at(chain)->initialized) {warn_not_initialized(chain); return -1;}
     if(!chains.at(chain)->set) {warn_desired_not_set(chain); return -1;}
 
-    q_out = q_input;
+    int dofs = chains.at(chain)->get_dofs();
+    if(chains.at(chain)->wb) dofs -= FLOATING_BASE_DOFS;
+
+    yarp::sig::Vector out(dofs,0.0);
+    yarp::sig::Vector input(dofs,0.0);
+
+    if(q_input.size()>input.size()) chains.at(chain)->idynutils.fromIDynToRobot(q_input,input,*chains.at(chain)->kin_chain);
+    else input=q_input;
+
+    out = input;
     unsigned int i;
 
     int maxiter=10000;   //NOTE: parameter
 
     for(i=0;i<maxiter;i++)
     {
-        yarp::sig::Vector temp=q_out;
-        q_out=q_out+next_step(chain,temp,precision)*d_t;
+        yarp::sig::Vector temp=out;
+        out=out+next_step(chain,temp,precision)*d_t;
         if (cartesian_action_completed(chain,precision)) break;
     }
 
@@ -378,6 +397,9 @@ double wholebody_ik::cartToJnt(std::string chain, const yarp::sig::Vector& q_inp
         std::cout<<yellow(" --------------- WARNING Reached maximum number of iterations in cartToJnt --------------- ")<<std::endl;
         return -1;
     }
+
+    if(q_out.size()>out.size()) chains.at(chain)->idynutils.fromRobotToIDyn(out,q_out,*chains.at(chain)->kin_chain);
+    else q_out = out;
 
     return chains.at(chain)->car_err;
 }
@@ -616,7 +638,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 				des_dq = Eigen::Matrix<double,ARM_DOFS,1>();
                 input_q = Eigen::Matrix<double,ARM_DOFS,1>();
                 pinvJ = Eigen::Matrix<double,ARM_DOFS,CARTESIAN_DIM>();
-                pinvJ = math_utilities::pseudoInverseQR_76(data->jacobian);
+//                 pinvJ = math_utilities::pseudoInverseQR_76(data->jacobian);
             }
             if(dofs==LEG_DOFS)
             {
@@ -625,8 +647,10 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 				des_dq = Eigen::Matrix<double,LEG_DOFS,1>();
                 input_q = Eigen::Matrix<double,LEG_DOFS,1>();
                 pinvJ = Eigen::Matrix<double,LEG_DOFS,CARTESIAN_DIM>();
-                pinvJ = math_utilities::pseudoInverseQR_66(data->jacobian);
+//                 pinvJ = math_utilities::pseudoInverseQR_66(data->jacobian);
             }
+
+	    pinvJ = math_utilities::pseudoInverseDamped(data->jacobian, 0.1);
 
             In.setZero();
             for(int w=0;w<dofs;w++) In(w,w)=1.0;
@@ -717,8 +741,8 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 //             std::cout<<"converged"<<std::endl;
         }
     }
-    
-    for(int i = 0;i<WB_DOFS-FLOATING_BASE_DOFS;i++)
+
+    for(int i = 0;i<out.size();i++)
     {
          out[i] = d_q(i);
     }
