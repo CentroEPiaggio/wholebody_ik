@@ -353,6 +353,16 @@ yarp::sig::Vector wholebody_ik::get_com_position_wrt_base_frame(std::string chai
 	return b_p_com;
 }
 
+void wholebody_ik::getCom(std::string chain,KDL::Vector& com)
+{
+    int base_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(chains.at(chain)->get_base_link());
+    yarp::sig::Vector com_ = get_com_position_wrt_base_frame(chain,base_index);
+
+    com.x(com_[0]);
+    com.y(com_[1]);
+    com.z(com_[2]);
+}
+
 double wholebody_ik::get_error(std::string chain)
 {
     return chains.at(chain)->car_err;

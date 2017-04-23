@@ -187,6 +187,8 @@ public:
      * @return the current error (computed in the previous next_step call with respect to the desired position
      */
     double get_error(std::string chain);
+    
+    void getCom(std::string chain, KDL::Vector& com);
 private:
 
     std::map<std::string,chain_data*> chains;
