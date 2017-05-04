@@ -114,6 +114,9 @@ TARGET_LINK_LIBRARIES(com_ik_test wholebody_ik_lib ${roscpp_LIBRARIES} ${tf_LIBR
 add_executable(limbs_ik_test tests/limbs_ik_test.cpp tests/visual_utils.cpp)
 TARGET_LINK_LIBRARIES(limbs_ik_test wholebody_ik_lib ${roscpp_LIBRARIES} ${tf_LIBRARIES} ${tf_conversions_LIBRARIES} ${trajectory_generator_LIBRARIES})
 
+add_executable(prova tests/prova.cpp tests/visual_utils.cpp)
+TARGET_LINK_LIBRARIES(prova wholebody_ik_lib ${roscpp_LIBRARIES} ${tf_LIBRARIES} ${tf_conversions_LIBRARIES} ${trajectory_generator_LIBRARIES})
+
 add_executable(wholebody_ik_test tests/wholebody_ik_test.cpp tests/visual_utils.cpp)
 TARGET_LINK_LIBRARIES(wholebody_ik_test wholebody_ik_lib ${roscpp_LIBRARIES} ${tf_LIBRARIES} ${tf_conversions_LIBRARIES} ${trajectory_generator_LIBRARIES})
 
@@ -137,6 +140,8 @@ add_subdirectory(app)
 install(TARGETS com_ik_test RUNTIME DESTINATION bin)
 
 install(TARGETS limbs_ik_test RUNTIME DESTINATION bin)
+
+install(TARGETS prova RUNTIME DESTINATION bin)
 
 install(TARGETS wholebody_ik_test RUNTIME DESTINATION bin)
 
