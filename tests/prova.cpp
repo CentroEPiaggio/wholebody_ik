@@ -15,12 +15,26 @@
 #include <wholebody_ik/wholebody_ik.h>
 #include <iostream>
 #include <string>
-#include "visual_utils.cpp"
 #include <trajectory_generator/trajectory_generator.h>
+#include <tf/transform_broadcaster.h>
+
+using namespace yarp::math;
 
 int main(int argc, char** argv)
 {
-    std::cout<<" -- This is a test to check the wholebody_ik library in a multicontact like scenario --"<<std::endl;
+    std::cout<<" -- This is a test to check the wholebody_ik library for the CoM --"<<std::endl;
+
+    bool right=false; //change this to perform the test for com wrt left or right foot
+
+    if(argc>1)
+    {
+        if(argc!=2)
+        {
+            std::cout<<"Please use 1 or none parameter!"<<std::endl;
+            return -1;
+        }
+        right = std::atoi(argv[1]);
+    }
 
     yarp::os::ResourceFinder rf;
     rf.setVerbose(true);
@@ -32,11 +46,14 @@ int main(int argc, char** argv)
     std::string urdf = rf.find("urdf_path").asString();
     std::string srdf = rf.find("srdf_path").asString();
     int period = rf.find("thread_period").asInt();
+    double s_period = (double)period / 1000.0;
 
     wholebody_ik IK(robot,urdf,srdf,period);
     
     std::map<std::string,KDL::Frame> desired_poses;
+    std::map<std::string,KDL::Frame> next_poses;
     std::map<std::string,KDL::Frame> initial_poses; //should come from sensing
+    std::map<std::string,KDL::Frame> current_poses;
     std::map<std::string,yarp::sig::Vector> q_init;
     std::map<std::string,yarp::sig::Vector> q_out;
     std::map<std::string,yarp::sig::Vector> q_sense;
@@ -50,62 +67,135 @@ int main(int argc, char** argv)
         ros::init( argc, argv, "wholebody_ik_test", ros::init_options::AnonymousName );
     }
 
+    tf::TransformBroadcaster broadcaster;
     ros::AsyncSpinner as(2);
+    ros::NodeHandle nh;
 
-    std::vector<std::string> chains;
-    chains.push_back("right_arm");
-    chains.push_back("left_arm");
-    chains.push_back("right_leg");
-    chains.push_back("left_leg");
-    visual_utils vutils("e","Waist",chains);
+    sensor_msgs::JointState joints_msg;
+    ros::Publisher joints_pub = nh.advertise<sensor_msgs::JointState>("joint_states",1);
+
+    joints_msg.name.push_back("LHipLat");
+    joints_msg.name.push_back("LHipYaw");
+    joints_msg.name.push_back("LHipSag");
+    joints_msg.name.push_back("LKneeSag");
+    joints_msg.name.push_back("LAnkSag");
+    joints_msg.name.push_back("LAnkLat");
     
-//     initial_poses["right_arm"] = KDL::Frame(KDL::Rotation::RPY(-0.830, -1.194, 0.831),KDL::Vector(0.410, -0.45, -0.14));
-//     desired_poses["right_arm"] = initial_poses["right_arm"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.2,-0.2,-0.2));
-    q_out["right_arm"] = yarp::sig::Vector(7,0.0);
-    q_init["right_arm"] = yarp::sig::Vector(q_out.at("right_arm").size(),0.0);
-    q_init.at("right_arm")[0] = 0.35;
-    q_init.at("right_arm")[1] = -1.57;
-    q_init.at("right_arm")[3] = -1.19; //NOTE: arms joints limits
-    q_init.at("right_arm")[5] = -0.25; //NOTE: to start far from the singularity
-    q_init.at("right_arm")[6] = -1.48; //NOTE: to start far from the singularity
-    q_sense["right_arm"] = q_init.at("right_arm");
-    joints["right_arm"];
-    joints.at("right_arm").resize(q_out.at("right_arm").size());
-    traj_gens["right_arm"];
+    joints_msg.name.push_back("RHipLat");
+    joints_msg.name.push_back("RHipYaw");
+    joints_msg.name.push_back("RHipSag");
+    joints_msg.name.push_back("RKneeSag");
+    joints_msg.name.push_back("RAnkSag");
+    joints_msg.name.push_back("RAnkLat");
+    
+    joints_msg.name.push_back("WaistLat");
+    joints_msg.name.push_back("WaistSag");
+    joints_msg.name.push_back("WaistYaw");
+    
+    joints_msg.name.push_back("LShSag");
+    joints_msg.name.push_back("LShLat");
+    joints_msg.name.push_back("LShYaw");
+    joints_msg.name.push_back("LElbj");
+    joints_msg.name.push_back("LForearmPlate");
+    joints_msg.name.push_back("LWrj1");
+    joints_msg.name.push_back("LWrj2");
+    
+    joints_msg.name.push_back("NeckPitchj");
+    joints_msg.name.push_back("NeckYawj");
+    
+    joints_msg.name.push_back("RShSag");
+    joints_msg.name.push_back("RShLat");
+    joints_msg.name.push_back("RShYaw");
+    joints_msg.name.push_back("RElbj");
+    joints_msg.name.push_back("RForearmPlate");
+    joints_msg.name.push_back("RWrj1");
+    joints_msg.name.push_back("RWrj2");
 
-//     initial_poses["left_arm"] = KDL::Frame(KDL::Rotation::RPY(0.872, -1.233, -0.887),KDL::Vector(0.410, 0.45, -0.14));
-//     desired_poses["left_arm"] = initial_poses["left_arm"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.2,0.2,-0.2));
-    q_out["left_arm"] = yarp::sig::Vector(7,0.0);
-    q_init["left_arm"] = yarp::sig::Vector(q_out.at("left_arm").size(),0.0);
-    q_init.at("left_arm")[0] = 0.35;
-    q_init.at("left_arm")[1] = 1.57;
-    q_init.at("left_arm")[3] = -1.19; //NOTE: arms joints limits
-    q_init.at("left_arm")[5] = -0.25; //NOTE: to start far from the singularity
-    q_init.at("left_arm")[6] = 1.48; //NOTE: to start far from the singularity
-    q_sense["left_arm"] = q_init.at("left_arm");
-    joints["left_arm"];
-    joints.at("left_arm").resize(q_out.at("left_arm").size());
-    traj_gens["left_arm"];
+    for(auto item:joints_msg.name) joints_msg.position.push_back(0.0);
+    
+    std::string chain;
+    std::string f_frame;
+    std::string other_leg;
+    double y_sign;
 
-//     initial_poses["right_leg"] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.006, -0.181, -1.083));
-//     desired_poses["right_leg"] = initial_poses["right_leg"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0,-0.2,0.2));
-    q_out["right_leg"] = yarp::sig::Vector(6,0.0);
-    q_init["right_leg"] = yarp::sig::Vector(q_out.at("right_leg").size(),0.0);
-    q_init.at("right_leg")[4] = -1.29; //NOTE: to start far from the singularity
-    q_sense["right_leg"] = q_init.at("right_leg");
-    joints["right_leg"];
-    joints.at("right_leg").resize(q_out.at("right_leg").size());
-    traj_gens["right_leg"];
+//     if(right)
+//     {
+//         chain = "wb_right";
+//         f_frame = "r_sole";
+//         y_sign = 1;
+//     }
+//     else
+//     {
+        chain = "wb_left";
+        f_frame = "l_sole";
+        y_sign = -1;
+//     }
 
-//     initial_poses["left_leg"] = KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.006, 0.181, -1.083));
-//     desired_poses["left_leg"] = initial_poses["left_leg"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0,0.2,0.2));
-    q_out["left_leg"] = yarp::sig::Vector(6,0.0);
-    q_init["left_leg"] = yarp::sig::Vector(q_out.at("left_leg").size(),0.0);
-    q_init.at("left_leg")[4] = -1.29; //NOTE: to start far from the singularity
-    q_sense["left_leg"] = q_init.at("left_leg");
-    joints["left_leg"];
-    joints.at("left_leg").resize(q_out.at("left_leg").size());
-    traj_gens["left_leg"];
+    std::map<std::string, std::string> links_to_chains;
+    links_to_chains["LSoftHand"] = "left_arm";
+    links_to_chains["RSoftHand"] = "right_arm";
+    links_to_chains["l_sole"] = "left_leg";
+    links_to_chains["r_sole"] = "right_leg";
+    links_to_chains["COM"] = chain;
+
+    other_leg = (f_frame=="r_sole")?"left_leg":"right_leg";
+    std::vector<std::string> chains;
+    chains.push_back(chain);
+    chains.push_back(other_leg);
+    chains.push_back("left_arm");
+    chains.push_back("right_arm");
+
+    iDynUtils idynutils(robot,urdf,srdf);
+    
+    yarp::sig::Vector joint_max = idynutils.iDyn3_model.getJointBoundMax();
+    yarp::sig::Vector joint_min = idynutils.iDyn3_model.getJointBoundMin();
+    
+    std::cout<<" ------- LIMITS ------- "<<std::endl;
+    for(auto jo:joints_msg.name)
+    {
+        std::cout<<joint_min[idynutils.iDyn3_model.getDOFIndex(jo)]<<" < "<<jo<<" < "<<joint_max[idynutils.iDyn3_model.getDOFIndex(jo)]<<std::endl;
+    }
+    
+    yarp::sig::Vector q_left_arm(7,0.0);
+    q_left_arm[0]  = 1.98;
+    q_left_arm[1]  = 2.40;
+    q_left_arm[2]  = 1.7;
+    q_left_arm[3]  = -0.42;
+    q_left_arm[4]  = 0.89;
+    q_left_arm[5]  = -0.63;
+    q_left_arm[6]  = 0.71;
+    yarp::sig::Vector q_right_arm(7,0.0);
+    q_right_arm[0] = 1.98;
+    q_right_arm[1] = -2.40;
+    q_right_arm[2] = -1.70;
+    q_right_arm[3] = -0.42;
+    q_right_arm[4] = -0.89;
+    q_right_arm[5] = -0.63;
+    q_right_arm[6] = -0.71;
+    yarp::sig::Vector q_left_leg(6,0.0);
+    q_left_leg[2]  = -0.2;
+    q_left_leg[4]  = -1.35;
+    yarp::sig::Vector q_right_leg(6,0.0);
+    q_right_leg[2] = -0.2;
+    q_right_leg[4] = -1.35;
+    yarp::sig::Vector q_torso(3,0.0);
+    q_torso[1] = -0.31;
+    yarp::sig::Vector q_head(2,0.0);
+
+    q_out[chain] = yarp::sig::Vector(31,0.0);
+    q_init[chain] = yarp::sig::Vector(q_out.at(chain).size(),0.0);
+
+    idynutils.fromRobotToIDyn(q_left_arm,q_init.at(chain),idynutils.left_arm);
+    idynutils.fromRobotToIDyn(q_right_arm,q_init.at(chain),idynutils.right_arm);
+    idynutils.fromRobotToIDyn(q_left_leg,q_init.at(chain),idynutils.left_leg);
+    idynutils.fromRobotToIDyn(q_right_leg,q_init.at(chain),idynutils.right_leg);
+    idynutils.fromRobotToIDyn(q_torso,q_init.at(chain),idynutils.torso);
+    idynutils.fromRobotToIDyn(q_head,q_init.at(chain),idynutils.head);
+    
+    q_sense[chain] = yarp::sig::Vector(q_init.at(chain).size(),0.0);
+    q_sense.at(chain) = q_init.at(chain);
+    joints[chain];
+    joints.at(chain).resize(q_out.at(chain).size());
 
     for(auto& joints_:joints)
     {
@@ -113,69 +203,122 @@ int main(int argc, char** argv)
         {
             joints_.second.at(i) = q_sense.at(joints_.first)[i];
         }
-
+        
         IK.initialize(joints_.first,q_sense.at(joints_.first));
-        IK.set_desired_ee_pose_as_current(joints_.first);
-        IK.get_current_ee_pose(joints_.first,initial_poses[joints_.first]);
     }
 
-    desired_poses["right_arm"] = initial_poses["right_arm"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0.5,0,0));
-    desired_poses["left_arm"] = initial_poses["left_arm"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0,0,0));
-    desired_poses["right_leg"] = initial_poses["right_leg"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0,0,0));
-    desired_poses["left_leg"] = initial_poses["left_leg"] * KDL::Frame(KDL::Rotation::RPY(0,0,0),KDL::Vector(0,0,0));
+    IK.set_desired_wb_poses_as_current(chain);
+    IK.get_desired_wb_poses(chain,initial_poses);
 
- for(auto& joints_:joints)
-     {
-         vutils.set_data(desired_poses.at(joints_.first), joints_.second, joints_.first);
-         traj_gens.at(joints_.first).line_initialize(traj_duration,initial_poses.at(joints_.first),desired_poses.at(joints_.first));
-    }
+    desired_poses["RSoftHand"] = initial_poses.at("RSoftHand");
+    desired_poses["LSoftHand"] = initial_poses.at("LSoftHand");
+    desired_poses["r_sole"] = initial_poses.at("r_sole");
+    desired_poses["l_sole"] = initial_poses.at("l_sole");
+    desired_poses["COM"] = initial_poses.at("COM");
 
     ros::Time start = ros::Time::now();
     ros::Duration exp;
-    KDL::Frame next_pose;
     KDL::Twist next_twist;
     double secs;
     double old_t = secs = 0;
-
+    double cart_error = 9999;
+    int k=0;
+    int steps = 0;
+        
     while(ros::ok())
     {
         old_t = secs;
-        secs = exp.toSec() + ((double)exp.toNSec()) / 1000000000.0;
+        secs = exp.toSec() + ((double)exp.toNSec()) / 1000000000.0;     
+	
+	
+	switch(steps)
+	{
+	  case 1: {
+		    desired_poses["RSoftHand"] = desired_poses.at("RSoftHand")* KDL::Frame(KDL::Rotation::RPY(0,0,0), KDL::Vector(0,0,0.1));
+		    desired_poses["LSoftHand"] = desired_poses.at("LSoftHand")* KDL::Frame(KDL::Rotation::RPY(0,0,0), KDL::Vector(0,0,0.1));
+		    desired_poses["r_sole"] = desired_poses.at("r_sole");// *KDL::Frame(KDL::Rotation::RPY(0,2.7,0), KDL::Vector(0,0,0.5));
+		    desired_poses["l_sole"] = desired_poses.at("l_sole");//* KDL::Frame(KDL::Rotation::RPY(0,0,0), KDL::Vector(0,0,0.1));
+		    desired_poses["COM"] = desired_poses.at("COM")* KDL::Frame(KDL::Rotation::RPY(0,0,0), KDL::Vector(-0.05,0,0.05));
+		    k=0;
+		    break;
+		    }
+		    
+	  case 2: {
+		    desired_poses["RSoftHand"] = desired_poses.at("RSoftHand");//* KDL::Frame(KDL::Rotation::RPY(0,0,-0.6), KDL::Vector(0,-0.8,0));
+		    desired_poses["LSoftHand"] = desired_poses.at("LSoftHand")* KDL::Frame(KDL::Rotation::RPY(0,0,0), KDL::Vector(0,0.3,0));
+		    desired_poses["r_sole"] = desired_poses.at("r_sole") ;//*KDL::Frame(KDL::Rotation::RPY(0,2.7,0), KDL::Vector(0,0,0.5));
+		    desired_poses["l_sole"] = desired_poses.at("l_sole");//* KDL::Frame(KDL::Rotation::RPY(0,0,0), KDL::Vector(0,0,0.1));
+		    desired_poses["COM"] = desired_poses.at("COM");//* KDL::Frame(KDL::Rotation::RPY(0,0,0), KDL::Vector(0,0,0.05));
+		    k=0;
+		    break;
+		    }
+		    
+	  case 3: {
+		      desired_poses["RSoftHand"] = desired_poses.at("RSoftHand")* KDL::Frame(KDL::Rotation::RPY(0,0,0), KDL::Vector(0,-0.3,0));
+		      desired_poses["LSoftHand"] = desired_poses.at("LSoftHand");//* KDL::Frame(KDL::Rotation::RPY(0,0,0), KDL::Vector(0,0.7,0));
+		      desired_poses["r_sole"] = desired_poses.at("r_sole"); // *KDL::Frame(KDL::Rotation::RPY(0,0,0), KDL::Vector(0,0,0.4));
+		      desired_poses["l_sole"] = desired_poses.at("l_sole");//* KDL::Frame(KDL::Rotation::RPY(0,0,0), KDL::Vector(0,0,0.1));
+		      desired_poses["COM"] = desired_poses.at("COM");//* KDL::Frame(KDL::Rotation::RPY(0,0,0), KDL::Vector(-0.7,0,0));
+		      k=0;
+		      break;
+		      }
+	}
+		    
+	IK.get_current_wb_poses(chain,current_poses);
+	
+	for(auto pose:current_poses)
+	{
+	    tf::Transform T;
+	    tf::transformKDLToTF(pose.second,T);
+	    tf::StampedTransform ST;
+	    ST.frame_id_ = "l_sole";
+	    ST.child_frame_id_ = pose.first + "_CUR";
+	    ST.setData(T);
+	    broadcaster.sendTransform(ST);
+	}
+	for(int i=0;i<joints.at(chain).size();i++)
+	{
+		joints_msg.position.at(i) = joints.at(chain).at(i);
+	}
+	joints_msg.header.frame_id="l_sole";
+	joints_msg.header.stamp = ros::Time::now();
+	joints_pub.publish(joints_msg);
 
-//         for(auto& traj_gen:traj_gens)
-//         {
-//             traj_gen.second.line_trajectory(secs,next_pose,next_twist);
-//             IK.set_desired_ee_pose(traj_gen.first,desired_poses.at(traj_gen.first));
-// 
-//             double cart_error = IK.cartToJnt(traj_gen.first,q_sense.at(traj_gen.first),q_out.at(traj_gen.first));
-// 
-//             if(cart_error==-1) std::cout<<" -- error: "<<traj_gen.first<<std::endl;
-// // 
-//             for(int i=0;i<q_out.at(traj_gen.first).size();i++)
-//             {
-//                 joints.at(traj_gen.first).at(i) = q_out.at(traj_gen.first)[i];
-//             }
-// // 
-//             vutils.set_data(next_pose, joints.at(traj_gen.first), traj_gen.first);
-// // 
-//             q_sense.at(traj_gen.first) = q_out.at(traj_gen.first);
-//         }
+	if(k == 0)
+	{
+		IK.set_desired_wb_poses(chain,desired_poses);
+		double ret=IK.cartToJnt(chain,q_sense.at(chain),q_out.at(chain));
+		std::cout<<" -- error: "<<ret<<std::endl;
+		if(ret==-1)
+		{
+		  std::cout<<"aiuto"<<std::endl;
+		  steps++;
+		  k++;
+		  continue;
+		}
 
-        usleep(50000);
+		for(int i=0;i<q_out.at(chain).size();i++)
+		{
+			joints.at(chain).at(i) = q_out.at(chain)[i];
+		}
+		
+		q_sense.at(chain) = q_out.at(chain);
+		
+		
+		k++;
+		
 
-//         if (secs > traj_duration)
-//         {
-//             start = ros::Time::now();
-//             secs=0;
-// 
-//             for(auto& q_s:q_sense)
-//             {
-//                 q_s.second=q_init.at(q_s.first); //restarting
-//             }
-//         }
+	}
+	
+	steps++;
+	
+	usleep(500000);
+	
 
         exp = ros::Time::now()-start;
     }
 
     return 0;
 }
+
+
