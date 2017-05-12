@@ -63,7 +63,7 @@ std::string red(std::string text)
 chain_data::chain_data(std::string robot_name, std::string urdf_path, std::string srdf_path, std::string ee_link, std::string base_link, int dofs, std::string chain_name): idynutils(robot_name,urdf_path,srdf_path)
 {
     yarp::sig::Vector joint_max = idynutils.iDyn3_model.getJointBoundMax();
-    joint_max[idynutils.iDyn3_model.getDOFIndex("RElbj")] = -0.02;
+    joint_max[idynutils.iDyn3_model.getDOFIndex("RElbj")] = -0.02; //NOTE: to avoid elbow strange position
     joint_max[idynutils.iDyn3_model.getDOFIndex("LElbj")] = -0.02;
     idynutils.iDyn3_model.setJointBoundMax(joint_max);
 
@@ -395,10 +395,18 @@ double wholebody_ik::cartToJnt(std::string chain, const yarp::sig::Vector& q_inp
 
     int maxiter=10000;   //NOTE: parameter
 
+    yarp::sig::Vector joint_min = chains.at(chain)->idynutils.iDyn3_model.getJointBoundMin();
+    yarp::sig::Vector joint_max = chains.at(chain)->idynutils.iDyn3_model.getJointBoundMax();
+
     for(i=0;i<maxiter;i++)
     {
         yarp::sig::Vector temp=out;
         out=out+next_step(chain,temp,precision)*d_t;
+	for(int k=0; k<dofs; k++)
+	{
+	    if(out[k] > joint_max[k]) out[k] = joint_max[k];
+	    if(out[k] < joint_min[k]) out[k] = joint_min[k];
+	}
         if (cartesian_action_completed(chain,precision)) break;
     }
 
@@ -757,8 +765,9 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
          out[i] = d_q(i);
     }
 
+    // NOTE to fix one or more joint
     out[data->idynutils.iDyn3_model.getDOFIndex("WaistLat")] = 0.0;
-    out[data->idynutils.iDyn3_model.getDOFIndex("WaistSag")] = 0.0;
+//     out[data->idynutils.iDyn3_model.getDOFIndex("WaistSag")] = 0.0;
 
     return out;
 }
