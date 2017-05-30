@@ -35,7 +35,7 @@
 #define CARTESIAN_DIM 6
 #define COM_DIM 3
 
-#define FULL_DIM COM_DIM + 4*CARTESIAN_DIM
+#define FULL_DIM COM_DIM + 4*CARTESIAN_DIM 
 
 using namespace yarp::math;
 
@@ -74,7 +74,7 @@ chain_data::chain_data(std::string robot_name, std::string urdf_path, std::strin
     if(chain_name=="right_leg") {kin_chain = &idynutils.right_leg; jacobian = Eigen::Matrix<double,CARTESIAN_DIM,LEG_DOFS>();}
     if(chain_name=="left_leg") {kin_chain = &idynutils.left_leg; jacobian = Eigen::Matrix<double,CARTESIAN_DIM,LEG_DOFS>();}
 
-    if(chain_name=="wb_left" || chain_name=="wb_right") {wb = true; jacobian = Eigen::Matrix<double,FULL_DIM,WB_DOFS>();}
+    if(chain_name=="wb_left" || chain_name=="wb_right") {wb = true; jacobian = Eigen::Matrix<double,FULL_DIM - 2,WB_DOFS>();}
 
     this->ee_link = ee_link;
     this->base_link = base_link;
@@ -196,6 +196,7 @@ bool wholebody_ik::initialize(std::string chain, const yarp::sig::Vector& q_inpu
         data->desired_poses["LSoftHand"] = KDL::Frame::Identity();
         data->desired_poses["RSoftHand"] = KDL::Frame::Identity();
         data->desired_poses["COM"] = KDL::Frame::Identity();
+	data->desired_poses["Waist"] = KDL::Frame::Identity();
     }
     else dim=CARTESIAN_DIM;
 
@@ -376,7 +377,7 @@ bool wholebody_ik::cartesian_action_completed(std::string chain, double precisio
 }
 
 
-double wholebody_ik::cartToJnt(std::string chain, const yarp::sig::Vector& q_input, yarp::sig::Vector& q_out,double precision)
+double wholebody_ik::cartToJnt(int switch_control, std::string chain, const yarp::sig::Vector& q_input, yarp::sig::Vector& q_out,double precision)
 {
     if(!chains.at(chain)->initialized) {warn_not_initialized(chain); return -1;}
     if(!chains.at(chain)->set) {warn_desired_not_set(chain); return -1;}
@@ -401,7 +402,7 @@ double wholebody_ik::cartToJnt(std::string chain, const yarp::sig::Vector& q_inp
     for(i=0;i<maxiter;i++)
     {
         yarp::sig::Vector temp=out;
-        out=out+next_step(chain,temp,precision)*d_t;
+        out=out+next_step(switch_control,chain,temp,precision)*d_t;
 	for(int k=0; k<dofs; k++)
 	{
 	    if(out[k] > joint_max[k]) out[k] = joint_max[k];
@@ -432,7 +433,7 @@ int compute_cols_to_remove(std::string chain)
     return cols_to_remove;
 }
 
-yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Vector& q_input, double precision)
+yarp::sig::Vector wholebody_ik::next_step(int switch_control, std::string chain, const yarp::sig::Vector& q_input, double precision)
 {
     chain_data *data = chains.at(chain);
     int dofs = data->get_dofs();
@@ -444,23 +445,27 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
     std::string r_foot_frame = "r_sole";
     std::string l_hand_frame = "LSoftHand";
     std::string r_hand_frame = "RSoftHand";
+    std::string waist_frame = "Waist";
 
     int l_foot_index = data->idynutils.iDyn3_model.getLinkIndex(l_foot_frame);
     int r_foot_index = data->idynutils.iDyn3_model.getLinkIndex(r_foot_frame);
     int l_hand_index = data->idynutils.iDyn3_model.getLinkIndex(l_hand_frame);
     int r_hand_index = data->idynutils.iDyn3_model.getLinkIndex(r_hand_frame);
+    int waist_index = data->idynutils.iDyn3_model.getLinkIndex(waist_frame);
     
     std::vector<int> ee_index;
     ee_index.push_back(l_hand_index);
     ee_index.push_back(r_hand_index);
     ee_index.push_back(l_foot_index);
     ee_index.push_back(r_foot_index);
+    ee_index.push_back(waist_index);
     
     std::vector<std::string> ee_names;
     ee_names.push_back(l_hand_frame);
     ee_names.push_back(r_hand_frame);
     ee_names.push_back(l_foot_frame);
     ee_names.push_back(r_foot_frame);
+    ee_names.push_back(waist_frame);
     
     yarp::sig::Matrix e_J_be, b_J_be;
     KDL::Frame ee_kdl;
@@ -558,6 +563,18 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 	yarp::sig::Matrix rf_Tr_w = locoman::utils::Homogeneous(locoman::utils::getRot(locoman::utils::iHomogeneous(w_T_rf)),null_vec);
 	yarp::sig::Matrix rf_J_rf = locoman::utils::Adjoint(rf_Tr_w) * w_J_rf;
         Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > rf_jac(rf_J_rf.data(),rf_J_rf.rows(),rf_J_rf.cols());
+	
+// 	// WAIST
+	yarp::sig::Matrix w_J_waist;        
+        if(!data->idynutils.iDyn3_model.getJacobian(waist_index,w_J_waist))
+        {
+            std::cout<<" !! ERROR : UNABLE TO GET waist JACOBIAN !! "<<std::endl;
+            return out;
+        }
+	yarp::sig::Matrix w_T_waist = data->idynutils.iDyn3_model.getPosition(waist_index);
+	yarp::sig::Matrix waist_Tr_w = locoman::utils::Homogeneous(locoman::utils::getRot(locoman::utils::iHomogeneous(w_T_waist)),null_vec);
+	yarp::sig::Matrix waist_J_waist = locoman::utils::Adjoint(waist_Tr_w) * w_J_waist;
+        Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > waist_jac(waist_J_waist.data(),waist_J_waist.rows(),waist_J_waist.cols());
 
         // we use the floating base to perform the pseudoinverse, then we remove the extra joints velocity
 
@@ -569,11 +586,35 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 	// | JRF  |
 		
 		// matrix.block<p,q>(i,j) = Block of size (p,q), starting at (i,j)
-        data->jacobian.block<COM_DIM,WB_DOFS>(0,0) = com_jac.block<COM_DIM,WB_DOFS>(0,0); // removing orientation part :3
-        data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM,0) = lh_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
-        data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + CARTESIAN_DIM,0) = rh_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
-        data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 2*CARTESIAN_DIM,0) = lf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
-        data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 3*CARTESIAN_DIM,0) = rf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+//         data->jacobian.block<COM_DIM,WB_DOFS>(0,0) = com_jac.block<COM_DIM,WB_DOFS>(0,0); // removing orientation part :3
+//         data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM,0) = lh_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+//         data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + CARTESIAN_DIM,0) = rh_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+//         data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 2*CARTESIAN_DIM,0) = lf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+//         data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 3*CARTESIAN_DIM,0) = rf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+	
+	if(switch_control == 0)
+	{
+	  data->jacobian.block<COM_DIM,WB_DOFS>(0,0) = com_jac.block<COM_DIM,WB_DOFS>(0,0); // removing orientation part :3
+	  data->jacobian.block<CARTESIAN_DIM-2,WB_DOFS>(COM_DIM,0) = lh_jac.block<CARTESIAN_DIM-2,WB_DOFS>(0,0);
+	  data->jacobian.block<1,WB_DOFS>(COM_DIM + CARTESIAN_DIM-2,0) = lh_jac.block<1,WB_DOFS>(5,0);
+	  data->jacobian.block<CARTESIAN_DIM -2,WB_DOFS>(COM_DIM + CARTESIAN_DIM -1,0) = rh_jac.block<CARTESIAN_DIM-2,WB_DOFS>(0,0);
+	  data->jacobian.block<1,WB_DOFS>(COM_DIM + 2 * CARTESIAN_DIM - 3,0) = rh_jac.block<1,WB_DOFS>(5,0);
+	  data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 2*CARTESIAN_DIM-2,0) = lf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+	  data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 3*CARTESIAN_DIM-2,0) = rf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+	}
+	else
+	{
+	  data->jacobian.block<COM_DIM,WB_DOFS>(0,0) = waist_jac.block<COM_DIM,WB_DOFS>(0,0);
+	  data->jacobian.block<CARTESIAN_DIM-2,WB_DOFS>(COM_DIM,0) = lh_jac.block<CARTESIAN_DIM-2,WB_DOFS>(0,0);
+	  data->jacobian.block<1,WB_DOFS>(COM_DIM + CARTESIAN_DIM-2,0) = lh_jac.block<1,WB_DOFS>(5,0);
+	  data->jacobian.block<CARTESIAN_DIM -2,WB_DOFS>(COM_DIM + CARTESIAN_DIM -1,0) = rh_jac.block<CARTESIAN_DIM-2,WB_DOFS>(0,0);
+	  data->jacobian.block<1,WB_DOFS>(COM_DIM + 2 * CARTESIAN_DIM - 3,0) = rh_jac.block<1,WB_DOFS>(5,0);
+	  data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 2*CARTESIAN_DIM-2,0) = lf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+	  data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 3*CARTESIAN_DIM-2,0) = rf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+	}
+
+	
+// 	std::cout<< "--- "<< COM_DIM + 4*CARTESIAN_DIM - 1 <<" ----"<<std::endl;
     }
     else //NOT WB
     {
@@ -703,16 +744,32 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 	// | d_C_LF  |
 	// | d_C_RF  |
       
-        Eigen::Matrix<double,FULL_DIM,1> d_C;
+        Eigen::Matrix<double,FULL_DIM -2,1> d_C;
         Eigen::Vector3d temp;
         yarp::sig::Matrix ee_d(3,3);
+	
+	if(switch_control == 0)
+	{
+	  KDL::Vector com_pos;
+	  math_utilities::vectorYARPToKDL(get_com_position_wrt_base_frame(chain,base_index),com_pos);
 
-	KDL::Vector com_pos;
-	math_utilities::vectorYARPToKDL(get_com_position_wrt_base_frame(chain,base_index),com_pos);
-
-        math_utilities::vectorKDLToEigen((data->desired_poses.at("COM").p - com_pos), temp);
-        d_C.block<COM_DIM,1>(0,0) = temp;
-
+	  math_utilities::vectorKDLToEigen((data->desired_poses.at("COM").p - com_pos), temp);
+	}
+	else
+	{
+	  yarp::sig::Matrix f_T_waist_cur = data->idynutils.iDyn3_model.getPosition(waist_index);
+	  yarp::sig::Matrix f_T_b = data->idynutils.iDyn3_model.getPosition(base_index);
+	  yarp::sig::Matrix b_T_waist_cur = locoman::utils::iHomogeneous(f_T_b) * f_T_waist_cur;
+	  
+	  yarp::sig::Matrix b_T_waist_des(4,4);
+	  math_utilities::FrameKDLToYARP(data->desired_poses.at("Waist"),b_T_waist_des);
+	  
+	  yarp::sig::Matrix cur_T_des = locoman::utils::iHomogeneous(b_T_waist_cur) * b_T_waist_des;
+	  math_utilities::vectorYARPToEigen(locoman::utils::getTrasl(cur_T_des),temp);
+	}
+	
+	d_C.block<COM_DIM,1>(0,0) = temp;
+	
 	KDL::Frame temp_current_ee;
 	yarp::sig::Matrix Eye_3(3,3);
 	Eye_3.eye() ;
@@ -728,15 +785,67 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 
 			yarp::sig::Matrix cur_T_des = locoman::utils::iHomogeneous(b_T_ee_cur) * b_T_ee_des;
 			math_utilities::vectorYARPToEigen(locoman::utils::getTrasl(cur_T_des),temp);
-			d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num,0) = temp;
+			
+			if(ee_names.at(limb_num) == "LSoftHand")
+			{
+			  d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num,0) = temp;
+// 			  std::cout << "--- "<< COM_DIM+CARTESIAN_DIM*limb_num <<" ---"<<std::endl;
+			}
+			else if (ee_names.at(limb_num) == "RSoftHand")
+			{
+			  d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num - 1,0) = temp;
+// 			  std::cout << "--- "<< COM_DIM+CARTESIAN_DIM*limb_num-1 <<" ---"<<std::endl;
+			}
+			else
+			{
+			  d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num - 2,0) = temp;
+// 			  std::cout << "--- "<< COM_DIM+CARTESIAN_DIM*limb_num-2 <<" ---"<<std::endl;
+			}
+			
+// 			if(ee_names.at(limb_num) == "LSoftHand")
+// 			{
+// 			  d_C.block<3,1>(1+CARTESIAN_DIM*limb_num,0) = temp;
+// // 			  std::cout << "--- "<< 1+CARTESIAN_DIM*limb_num <<" ---"<<std::endl;
+// 			}
+// 			else if (ee_names.at(limb_num) == "RSoftHand")
+// 			{
+// 			  d_C.block<3,1>(CARTESIAN_DIM*limb_num,0) = temp;
+// // 			  std::cout << "--- "<< CARTESIAN_DIM*limb_num <<" ---"<<std::endl;
+// 			}
+// 			else
+// 			{
+// 			  d_C.block<3,1>(CARTESIAN_DIM*limb_num - 1,0) = temp;
+// // 			  std::cout << "--- "<< CARTESIAN_DIM*limb_num-1 <<" ---"<<std::endl;
+// 			}
+			
 
 			ee_d = locoman::utils::getRot(cur_T_des);
 			Eo = locoman::utils::Orient_Error(ee_d, Eye_3);
 			math_utilities::vectorYARPToEigen(Eo,temp);
-			d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num+3,0) = temp;
+			if( ee_names.at(limb_num)=="LSoftHand")
+			{
+			  d_C.block<1,1>(COM_DIM+CARTESIAN_DIM*limb_num+3,0) = temp.block<1,1>(0,0);
+			  d_C.block<1,1>(COM_DIM+CARTESIAN_DIM*limb_num+4,0) = temp.block<1,1>(2,0);
+// 			  std::cout << "--- "<< 1+CARTESIAN_DIM*limb_num+3 <<" ---"<<std::endl;
+			}
+			else if ( ee_names.at(limb_num)=="RSoftHand")
+			{
+			  d_C.block<1,1>(COM_DIM+CARTESIAN_DIM*limb_num+2,0) = temp.block<1,1>(0,0);
+			  d_C.block<1,1>(COM_DIM+CARTESIAN_DIM*limb_num+3,0) = temp.block<1,1>(2,0);
+// 			  std::cout << "--- "<< CARTESIAN_DIM*limb_num+3 <<" ---"<<std::endl;
+			}
+			else if (ee_names.at(limb_num)=="l_sole"|| ee_names.at(limb_num)=="r_sole")
+			{
+			  d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num+1,0) = temp;
+// 			  std::cout << "--- "<< CARTESIAN_DIM*limb_num+3-1 <<" ---"<<std::endl;
+			}
+			
         }
-
-        if(!data->first_step) data->car_err= d_C.norm();
+	
+// 	print_eigen_matrix_ndigits(d_C);
+// 	abort();
+        
+	if(!data->first_step) data->car_err= d_C.norm();
         else data->first_step = false;
 
         d_q = Eigen::Matrix<double,WB_DOFS-FLOATING_BASE_DOFS,1>();
@@ -745,7 +854,7 @@ yarp::sig::Vector wholebody_ik::next_step(std::string chain, const yarp::sig::Ve
 
         if (!cartesian_action_completed(chain,precision)) // NOTE maybe not the best stop criterion
         {
-			Eigen::MatrixXd pinvJ = Eigen::Matrix<double,WB_DOFS,FULL_DIM>();
+			Eigen::MatrixXd pinvJ = Eigen::Matrix<double,WB_DOFS,FULL_DIM - 2>();
 
 			pinvJ = math_utilities::pseudoInverseDamped(data->jacobian, 0.1);
 			
