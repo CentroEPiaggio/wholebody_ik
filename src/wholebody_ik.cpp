@@ -356,7 +356,18 @@ yarp::sig::Vector wholebody_ik::get_com_position_wrt_base_frame(std::string chai
 
 void wholebody_ik::getCom(std::string chain,KDL::Vector& com)
 {
-    int base_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(chains.at(chain)->get_base_link());
+    int base_index;
+    
+    if (chain == "wb_left")
+    {
+      std::string base_link;
+      base_link = "l_sole";
+      base_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(base_link);
+    }
+    else
+    {
+      base_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(chains.at(chain)->get_base_link());
+    }
     yarp::sig::Vector com_ = get_com_position_wrt_base_frame(chain,base_index);
 
     com.x(com_[0]);
@@ -875,7 +886,7 @@ yarp::sig::Vector wholebody_ik::next_step(int switch_control, std::string chain,
     }
 
     // NOTE to fix one or more joint
-    out[data->idynutils.iDyn3_model.getDOFIndex("WaistLat")] = 0.0;
+//     out[data->idynutils.iDyn3_model.getDOFIndex("WaistLat")] = 0.0;
 //     out[data->idynutils.iDyn3_model.getDOFIndex("WaistSag")] = 0.0;
 
     return out;
