@@ -358,10 +358,10 @@ void wholebody_ik::getCom(std::string chain,KDL::Vector& com)
 {
     int base_index;
     
-    if (chain == "wb_left")
+    if (chain == "wb_left"|| chain == "wb_right")
     {
       std::string base_link;
-      base_link = "l_sole";
+      base_link = (chain=="wb_left")?"l_sole":"r_sole";
       base_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(base_link);
     }
     else
