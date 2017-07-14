@@ -74,7 +74,7 @@ chain_data::chain_data(std::string robot_name, std::string urdf_path, std::strin
     if(chain_name=="right_leg") {kin_chain = &idynutils.right_leg; jacobian = Eigen::Matrix<double,CARTESIAN_DIM,LEG_DOFS>();}
     if(chain_name=="left_leg") {kin_chain = &idynutils.left_leg; jacobian = Eigen::Matrix<double,CARTESIAN_DIM,LEG_DOFS>();}
 
-    if(chain_name=="wb_left" || chain_name=="wb_right") {wb = true; jacobian = Eigen::Matrix<double,FULL_DIM - 2,WB_DOFS>();}
+    if(chain_name=="wb_left" || chain_name=="wb_right"|| chain_name == "wb_waist") {wb = true; jacobian = Eigen::Matrix<double,FULL_DIM - 2,WB_DOFS>();}
 
     this->ee_link = ee_link;
     this->base_link = base_link;
@@ -94,6 +94,7 @@ wholebody_ik::wholebody_ik(std::string robot_name,std::string urdf_path, std::st
 
     chains["wb_left"]  = new chain_data(robot_name,urdf_path,srdf_path,"WB"      ,"Waist", WB_DOFS, "wb_left");
     chains["wb_right"] = new chain_data(robot_name,urdf_path,srdf_path,"WB"      ,"Waist", WB_DOFS, "wb_right");
+    chains["wb_waist"] = new chain_data(robot_name,urdf_path,srdf_path,"WB"      ,"Waist", WB_DOFS, "wb_waist");
 }
 
 void wholebody_ik::print_eigen_matrix(const Eigen::MatrixXd& data)
@@ -225,8 +226,13 @@ void wholebody_ik::set_desired_wb_poses_as_current(std::string chain)
 
     int link_index;
     
-    std::string base_frame = (chain=="wb_left")?"l_sole":"r_sole";
+    std::string base_frame;
+    if(chain == "wb_waist")
+      base_frame = "Waist";
+    else base_frame = (chain=="wb_left")?"l_sole":"r_sole";
     int base_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(base_frame);
+    
+//     std::cout <<"Base_frame "<< base_frame<< " link_index " << base_index<< std::endl;
     
     for(auto& pose:chains.at(chain)->desired_poses)
     {
@@ -272,8 +278,13 @@ void wholebody_ik::get_current_wb_poses(std::string chain, std::map< std::string
 
 	int link_index;
 
-	std::string base_frame = (chain=="wb_left")?"l_sole":"r_sole";
+	std::string base_frame;
+	if(chain == "wb_waist")
+	  base_frame = "Waist";
+	else base_frame = (chain=="wb_left")?"l_sole":"r_sole";
 	int base_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(base_frame);
+	
+// 	std::cout <<"Base_frame "<< base_frame<< " link_index " << base_index<< std::endl;
 
 	for(auto pose:chains.at(chain)->desired_poses)
 	{
@@ -358,10 +369,12 @@ void wholebody_ik::getCom(std::string chain,KDL::Vector& com)
 {
     int base_index;
     
-    if (chain == "wb_left"|| chain == "wb_right")
+    if (chain == "wb_left"|| chain == "wb_right"|| chain == "wb_waist")
     {
       std::string base_link;
-      base_link = (chain=="wb_left")?"l_sole":"r_sole";
+      if(chain == "wb_waist")
+       base_link = "Waist";
+      else base_link = (chain=="wb_left")?"l_sole":"r_sole";
       base_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(base_link);
     }
     else
@@ -419,7 +432,8 @@ double wholebody_ik::cartToJnt(int switch_control, std::string chain, const yarp
 	    if(out[k] > joint_max[k]) out[k] = joint_max[k];
 	    if(out[k] < joint_min[k]) out[k] = joint_min[k];
 	}
-        if (cartesian_action_completed(chain,precision)) break;
+        if (cartesian_action_completed(chain,precision))  break;
+
     }
 
     if(i >= maxiter)
@@ -509,6 +523,7 @@ yarp::sig::Vector wholebody_ik::next_step(int switch_control, std::string chain,
         std::string base_frame;
         if(chain=="wb_left") base_frame="l_sole";
         if(chain=="wb_right") base_frame="r_sole";
+	if(chain=="wb_waist") base_frame="Waist";
         base_index = data->idynutils.iDyn3_model.getLinkIndex(base_frame);
     }
 
