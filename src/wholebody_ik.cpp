@@ -232,8 +232,6 @@ void wholebody_ik::set_desired_wb_poses_as_current(std::string chain)
     else base_frame = (chain=="wb_left")?"l_sole":"r_sole";
     int base_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(base_frame);
     
-//     std::cout <<"Base_frame "<< base_frame<< " link_index " << base_index<< std::endl;
-    
     for(auto& pose:chains.at(chain)->desired_poses)
     {
         if(pose.first!="COM")
@@ -245,16 +243,20 @@ void wholebody_ik::set_desired_wb_poses_as_current(std::string chain)
                 std::cout<<red(" !! ERROR : UNABLE TO GET LINK INDEX !! ")<<std::endl;
                 return;
             }
+	    
+	    if (chain == "wb_waist")
+	      pose.second = chains.at(chain)->idynutils.iDyn3_model.getPositionKDL(link_index);
+	    else
+              pose.second = chains.at(chain)->idynutils.iDyn3_model.getPositionKDL(base_index,link_index);
 
-            pose.second = chains.at(chain)->idynutils.iDyn3_model.getPositionKDL(base_index,link_index);
         }
         else
         {
-			KDL::Vector com;
-			math_utilities::vectorYARPToKDL(get_com_position_wrt_base_frame(chain,base_index),com);
-            pose.second = KDL::Frame(KDL::Rotation::Identity(), com);
-        }
-    }
+	  KDL::Vector com;
+	  math_utilities::vectorYARPToKDL(get_com_position_wrt_base_frame(chain,base_index),com);
+	  pose.second = KDL::Frame(KDL::Rotation::Identity(), com);
+      }
+  }
 
     chains.at(chain)->set=true;
 }
@@ -297,8 +299,11 @@ void wholebody_ik::get_current_wb_poses(std::string chain, std::map< std::string
 				std::cout<<red(" !! ERROR : UNABLE TO GET LINK INDEX !! ")<<std::endl;
 				return;
 			}
+			if(chain == "wb_waist") 
+			 cartesian_poses[pose.first] = chains.at(chain)->idynutils.iDyn3_model.getPositionKDL(link_index);
+			else
+			 cartesian_poses[pose.first] = chains.at(chain)->idynutils.iDyn3_model.getPositionKDL(base_index,link_index);
 
-			cartesian_poses[pose.first] = chains.at(chain)->idynutils.iDyn3_model.getPositionKDL(base_index,link_index);
 		}
 		else
 		{
@@ -361,7 +366,10 @@ yarp::sig::Vector wholebody_ik::get_com_position_wrt_base_frame(std::string chai
 	yarp::sig::Vector b_p_com_w = b_R_w * w_p_com; // COM w.r.t. World but expressed in base_frame
 	yarp::sig::Vector b_p_w = locoman::utils::getTrasl(locoman::utils::iHomogeneous(w_T_b));
 	yarp::sig::Vector b_p_com = b_p_w + b_p_com_w;
-
+	
+	if(chain == "wb_waist")
+	  return w_p_com;
+	else
 	return b_p_com;
 }
 
@@ -529,115 +537,213 @@ yarp::sig::Vector wholebody_ik::next_step(int switch_control, std::string chain,
 
     if(data->wb) //WB
     {
-        //COM
-        yarp::sig::Matrix w_J_com;
-        if(!data->idynutils.iDyn3_model.getCOMJacobian(w_J_com)) //NOTE: it has also orientation part, to be removed :3
-        {
-            std::cout<<" !! ERROR : UNABLE TO GET COM JACOBIAN !! "<<std::endl;
-            return out;
-        }
-        yarp::sig::Matrix w_T_b = data->idynutils.iDyn3_model.getPosition(base_index);
-	yarp::sig::Vector null_vec(3,0.0);
-	yarp::sig::Matrix b_Tr_w = locoman::utils::Homogeneous(locoman::utils::getRot(locoman::utils::iHomogeneous(w_T_b)),null_vec); // only rotation
-	yarp::sig::Matrix b_J_com = locoman::utils::Adjoint(b_Tr_w) * w_J_com;
-	Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > com_jac(b_J_com.data(),b_J_com.rows(),b_J_com.cols());
-
-	// LEFT HAND
-	yarp::sig::Matrix w_J_lh;
-        if(!data->idynutils.iDyn3_model.getJacobian(l_hand_index,w_J_lh))
-        {
-            std::cout<<" !! ERROR : UNABLE TO GET LSoftHand JACOBIAN !! "<<std::endl;
-            return out;
-        }
-        yarp::sig::Matrix w_T_lh = data->idynutils.iDyn3_model.getPosition(l_hand_index);
-	yarp::sig::Matrix lh_Tr_w = locoman::utils::Homogeneous(locoman::utils::getRot(locoman::utils::iHomogeneous(w_T_lh)),null_vec);
-	yarp::sig::Matrix lh_J_lh = locoman::utils::Adjoint(lh_Tr_w) * w_J_lh;
-        Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > lh_jac(lh_J_lh.data(),lh_J_lh.rows(),lh_J_lh.cols());
-
-	// RIGHT HAND
-        yarp::sig::Matrix w_J_rh;
-        if(!data->idynutils.iDyn3_model.getJacobian(r_hand_index,w_J_rh))
-        {
-            std::cout<<" !! ERROR : UNABLE TO GET RSoftHand JACOBIAN !! "<<std::endl;
-            return out;
-        }
-        yarp::sig::Matrix w_T_rh = data->idynutils.iDyn3_model.getPosition(r_hand_index);
-	yarp::sig::Matrix rh_Tr_w = locoman::utils::Homogeneous(locoman::utils::getRot(locoman::utils::iHomogeneous(w_T_rh)),null_vec);
-	yarp::sig::Matrix rh_J_rh = locoman::utils::Adjoint(rh_Tr_w) * w_J_rh;
-        Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > rh_jac(rh_J_rh.data(),rh_J_rh.rows(),rh_J_rh.cols());
-
-	// LEFT FOOT
-        yarp::sig::Matrix w_J_lf;
-        if(!data->idynutils.iDyn3_model.getJacobian(l_foot_index,w_J_lf))
-        {
-            std::cout<<" !! ERROR : UNABLE TO GET l_sole JACOBIAN !! "<<std::endl;
-            return out;
-        }
-	yarp::sig::Matrix w_T_lf = data->idynutils.iDyn3_model.getPosition(l_foot_index);
-	yarp::sig::Matrix lf_Tr_w = locoman::utils::Homogeneous(locoman::utils::getRot(locoman::utils::iHomogeneous(w_T_lf)),null_vec);
-	yarp::sig::Matrix lf_J_lf = locoman::utils::Adjoint(lf_Tr_w) * w_J_lf;
-        Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > lf_jac(lf_J_lf.data(),lf_J_lf.rows(),lf_J_lf.cols());
-
-	// RIGHT FOOT
-        yarp::sig::Matrix w_J_rf;        
-        if(!data->idynutils.iDyn3_model.getJacobian(r_foot_index,w_J_rf))
-        {
-            std::cout<<" !! ERROR : UNABLE TO GET r_sole JACOBIAN !! "<<std::endl;
-            return out;
-        }
-	yarp::sig::Matrix w_T_rf = data->idynutils.iDyn3_model.getPosition(r_foot_index);
-	yarp::sig::Matrix rf_Tr_w = locoman::utils::Homogeneous(locoman::utils::getRot(locoman::utils::iHomogeneous(w_T_rf)),null_vec);
-	yarp::sig::Matrix rf_J_rf = locoman::utils::Adjoint(rf_Tr_w) * w_J_rf;
-        Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > rf_jac(rf_J_rf.data(),rf_J_rf.rows(),rf_J_rf.cols());
-	
-// 	// WAIST
-	yarp::sig::Matrix w_J_waist;        
-        if(!data->idynutils.iDyn3_model.getJacobian(waist_index,w_J_waist))
-        {
-            std::cout<<" !! ERROR : UNABLE TO GET waist JACOBIAN !! "<<std::endl;
-            return out;
-        }
-	yarp::sig::Matrix w_T_waist = data->idynutils.iDyn3_model.getPosition(waist_index);
-	yarp::sig::Matrix waist_Tr_w = locoman::utils::Homogeneous(locoman::utils::getRot(locoman::utils::iHomogeneous(w_T_waist)),null_vec);
-	yarp::sig::Matrix waist_J_waist = locoman::utils::Adjoint(waist_Tr_w) * w_J_waist;
-        Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > waist_jac(waist_J_waist.data(),waist_J_waist.rows(),waist_J_waist.cols());
-
-        // we use the floating base to perform the pseudoinverse, then we remove the extra joints velocity
-
-	// final jacobian:
-	// | Jcom |
-	// | JLH  |
-	// | JRH  |
-	// | JLF  |
-	// | JRF  |
-		
-		// matrix.block<p,q>(i,j) = Block of size (p,q), starting at (i,j)
-//         data->jacobian.block<COM_DIM,WB_DOFS>(0,0) = com_jac.block<COM_DIM,WB_DOFS>(0,0); // removing orientation part :3
-//         data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM,0) = lh_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
-//         data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + CARTESIAN_DIM,0) = rh_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
-//         data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 2*CARTESIAN_DIM,0) = lf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
-//         data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 3*CARTESIAN_DIM,0) = rf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
-	
-	if(switch_control == 0)
+        if(chain == "wb_waist")
 	{
-	  data->jacobian.block<COM_DIM,WB_DOFS>(0,0) = com_jac.block<COM_DIM,WB_DOFS>(0,0); // removing orientation part :3
-	  data->jacobian.block<CARTESIAN_DIM-2,WB_DOFS>(COM_DIM,0) = lh_jac.block<CARTESIAN_DIM-2,WB_DOFS>(0,0);
-	  data->jacobian.block<1,WB_DOFS>(COM_DIM + CARTESIAN_DIM-2,0) = lh_jac.block<1,WB_DOFS>(5,0);
-	  data->jacobian.block<CARTESIAN_DIM -2,WB_DOFS>(COM_DIM + CARTESIAN_DIM -1,0) = rh_jac.block<CARTESIAN_DIM-2,WB_DOFS>(0,0);
-	  data->jacobian.block<1,WB_DOFS>(COM_DIM + 2 * CARTESIAN_DIM - 3,0) = rh_jac.block<1,WB_DOFS>(5,0);
-	  data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 2*CARTESIAN_DIM-2,0) = lf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
-	  data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 3*CARTESIAN_DIM-2,0) = rf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+	  //COM
+	  yarp::sig::Matrix w_J_com;
+	  if(!data->idynutils.iDyn3_model.getCOMJacobian(w_J_com)) //NOTE: it has also orientation part, to be removed :3
+	  {
+	      std::cout<<" !! ERROR : UNABLE TO GET COM JACOBIAN !! "<<std::endl;
+	      return out;
+	  }
+	  Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > com_jac(w_J_com.data(),w_J_com.rows(),w_J_com.cols());
+
+	  // LEFT HAND
+	  yarp::sig::Matrix w_J_lh;
+	  if(!data->idynutils.iDyn3_model.getJacobian(l_hand_index,w_J_lh))
+	  {
+	      std::cout<<" !! ERROR : UNABLE TO GET LSoftHand JACOBIAN !! "<<std::endl;
+	      return out;
+	  }
+	  Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > lh_jac(w_J_lh.data(),w_J_lh.rows(),w_J_lh.cols());
+
+	  // RIGHT HAND
+	  yarp::sig::Matrix w_J_rh;
+	  if(!data->idynutils.iDyn3_model.getJacobian(r_hand_index,w_J_rh))
+	  {
+	      std::cout<<" !! ERROR : UNABLE TO GET RSoftHand JACOBIAN !! "<<std::endl;
+	      return out;
+	  }
+	  Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > rh_jac(w_J_rh.data(),w_J_rh.rows(),w_J_rh.cols());
+
+	  // LEFT FOOT
+	  yarp::sig::Matrix w_J_lf;
+	  if(!data->idynutils.iDyn3_model.getJacobian(l_foot_index,w_J_lf))
+	  {
+	      std::cout<<" !! ERROR : UNABLE TO GET l_sole JACOBIAN !! "<<std::endl;
+	      return out;
+	  }
+	  Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > lf_jac(w_J_lf.data(),w_J_lf.rows(),w_J_lf.cols());
+
+	  // RIGHT FOOT
+	  yarp::sig::Matrix w_J_rf;        
+	  if(!data->idynutils.iDyn3_model.getJacobian(r_foot_index,w_J_rf))
+	  {
+	      std::cout<<" !! ERROR : UNABLE TO GET r_sole JACOBIAN !! "<<std::endl;
+	      return out;
+	  }
+	  Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > rf_jac(w_J_rf.data(),w_J_rf.rows(),w_J_rf.cols());
+	  
+  // 	// WAIST
+	  yarp::sig::Matrix w_J_waist;        
+	  if(!data->idynutils.iDyn3_model.getJacobian(waist_index,w_J_waist))
+	  {
+	      std::cout<<" !! ERROR : UNABLE TO GET waist JACOBIAN !! "<<std::endl;
+	      return out;
+	  }
+	  Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > waist_jac(w_J_waist.data(),w_J_waist.rows(),w_J_waist.cols());
+	  
+	  // we use the floating base to perform the pseudoinverse, then we remove the extra joints velocity
+
+	  // final jacobian:
+	  // | Jcom |
+	  // | JLH  |
+	  // | JRH  |
+	  // | JLF  |
+	  // | JRF  |
+		  
+		  // matrix.block<p,q>(i,j) = Block of size (p,q), starting at (i,j)
+  //         data->jacobian.block<COM_DIM,WB_DOFS>(0,0) = com_jac.block<COM_DIM,WB_DOFS>(0,0); // removing orientation part :3
+  //         data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM,0) = lh_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+  //         data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + CARTESIAN_DIM,0) = rh_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+  //         data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 2*CARTESIAN_DIM,0) = lf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+  //         data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 3*CARTESIAN_DIM,0) = rf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+	  
+	  if(switch_control == 0)
+	  {
+	    data->jacobian.block<COM_DIM,WB_DOFS>(0,0) = com_jac.block<COM_DIM,WB_DOFS>(0,0); // removing orientation part :3
+	    data->jacobian.block<CARTESIAN_DIM-2,WB_DOFS>(COM_DIM,0) = lh_jac.block<CARTESIAN_DIM-2,WB_DOFS>(0,0);
+	    data->jacobian.block<1,WB_DOFS>(COM_DIM + CARTESIAN_DIM-2,0) = lh_jac.block<1,WB_DOFS>(5,0);
+	    data->jacobian.block<CARTESIAN_DIM -2,WB_DOFS>(COM_DIM + CARTESIAN_DIM -1,0) = rh_jac.block<CARTESIAN_DIM-2,WB_DOFS>(0,0);
+	    data->jacobian.block<1,WB_DOFS>(COM_DIM + 2 * CARTESIAN_DIM - 3,0) = rh_jac.block<1,WB_DOFS>(5,0);
+	    data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 2*CARTESIAN_DIM-2,0) = lf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+	    data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 3*CARTESIAN_DIM-2,0) = rf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+	  }
+	  else
+	  {
+	    data->jacobian.block<COM_DIM,WB_DOFS>(0,0) = waist_jac.block<COM_DIM,WB_DOFS>(0,0);
+	    data->jacobian.block<CARTESIAN_DIM-2,WB_DOFS>(COM_DIM,0) = lh_jac.block<CARTESIAN_DIM-2,WB_DOFS>(0,0);
+	    data->jacobian.block<1,WB_DOFS>(COM_DIM + CARTESIAN_DIM-2,0) = lh_jac.block<1,WB_DOFS>(5,0);
+	    data->jacobian.block<CARTESIAN_DIM -2,WB_DOFS>(COM_DIM + CARTESIAN_DIM -1,0) = rh_jac.block<CARTESIAN_DIM-2,WB_DOFS>(0,0);
+	    data->jacobian.block<1,WB_DOFS>(COM_DIM + 2 * CARTESIAN_DIM - 3,0) = rh_jac.block<1,WB_DOFS>(5,0);
+	    data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 2*CARTESIAN_DIM-2,0) = lf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+	    data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 3*CARTESIAN_DIM-2,0) = rf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+	  }
 	}
 	else
 	{
-	  data->jacobian.block<COM_DIM,WB_DOFS>(0,0) = waist_jac.block<COM_DIM,WB_DOFS>(0,0);
-	  data->jacobian.block<CARTESIAN_DIM-2,WB_DOFS>(COM_DIM,0) = lh_jac.block<CARTESIAN_DIM-2,WB_DOFS>(0,0);
-	  data->jacobian.block<1,WB_DOFS>(COM_DIM + CARTESIAN_DIM-2,0) = lh_jac.block<1,WB_DOFS>(5,0);
-	  data->jacobian.block<CARTESIAN_DIM -2,WB_DOFS>(COM_DIM + CARTESIAN_DIM -1,0) = rh_jac.block<CARTESIAN_DIM-2,WB_DOFS>(0,0);
-	  data->jacobian.block<1,WB_DOFS>(COM_DIM + 2 * CARTESIAN_DIM - 3,0) = rh_jac.block<1,WB_DOFS>(5,0);
-	  data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 2*CARTESIAN_DIM-2,0) = lf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
-	  data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 3*CARTESIAN_DIM-2,0) = rf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+	  //COM
+	  yarp::sig::Matrix w_J_com;
+	  if(!data->idynutils.iDyn3_model.getCOMJacobian(w_J_com)) //NOTE: it has also orientation part, to be removed :3
+	  {
+	      std::cout<<" !! ERROR : UNABLE TO GET COM JACOBIAN !! "<<std::endl;
+	      return out;
+	  }
+	  yarp::sig::Matrix w_T_b = data->idynutils.iDyn3_model.getPosition(base_index);
+	  yarp::sig::Vector null_vec(3,0.0);
+	  yarp::sig::Matrix b_Tr_w = locoman::utils::Homogeneous(locoman::utils::getRot(locoman::utils::iHomogeneous(w_T_b)),null_vec); // only rotation
+	  yarp::sig::Matrix b_J_com = locoman::utils::Adjoint(b_Tr_w) * w_J_com;
+	  Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > com_jac(b_J_com.data(),b_J_com.rows(),b_J_com.cols());
+
+	  // LEFT HAND
+	  yarp::sig::Matrix w_J_lh;
+	  if(!data->idynutils.iDyn3_model.getJacobian(l_hand_index,w_J_lh))
+	  {
+	      std::cout<<" !! ERROR : UNABLE TO GET LSoftHand JACOBIAN !! "<<std::endl;
+	      return out;
+	  }
+	  yarp::sig::Matrix w_T_lh = data->idynutils.iDyn3_model.getPosition(l_hand_index);
+	  yarp::sig::Matrix lh_Tr_w = locoman::utils::Homogeneous(locoman::utils::getRot(locoman::utils::iHomogeneous(w_T_lh)),null_vec);
+	  yarp::sig::Matrix lh_J_lh = locoman::utils::Adjoint(lh_Tr_w) * w_J_lh;
+	  Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > lh_jac(lh_J_lh.data(),lh_J_lh.rows(),lh_J_lh.cols());
+
+	  // RIGHT HAND
+	  yarp::sig::Matrix w_J_rh;
+	  if(!data->idynutils.iDyn3_model.getJacobian(r_hand_index,w_J_rh))
+	  {
+	      std::cout<<" !! ERROR : UNABLE TO GET RSoftHand JACOBIAN !! "<<std::endl;
+	      return out;
+	  }
+	  yarp::sig::Matrix w_T_rh = data->idynutils.iDyn3_model.getPosition(r_hand_index);
+	  yarp::sig::Matrix rh_Tr_w = locoman::utils::Homogeneous(locoman::utils::getRot(locoman::utils::iHomogeneous(w_T_rh)),null_vec);
+	  yarp::sig::Matrix rh_J_rh = locoman::utils::Adjoint(rh_Tr_w) * w_J_rh;
+	  Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > rh_jac(rh_J_rh.data(),rh_J_rh.rows(),rh_J_rh.cols());
+
+	  // LEFT FOOT
+	  yarp::sig::Matrix w_J_lf;
+	  if(!data->idynutils.iDyn3_model.getJacobian(l_foot_index,w_J_lf))
+	  {
+	      std::cout<<" !! ERROR : UNABLE TO GET l_sole JACOBIAN !! "<<std::endl;
+	      return out;
+	  }
+	  yarp::sig::Matrix w_T_lf = data->idynutils.iDyn3_model.getPosition(l_foot_index);
+	  yarp::sig::Matrix lf_Tr_w = locoman::utils::Homogeneous(locoman::utils::getRot(locoman::utils::iHomogeneous(w_T_lf)),null_vec);
+	  yarp::sig::Matrix lf_J_lf = locoman::utils::Adjoint(lf_Tr_w) * w_J_lf;
+	  Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > lf_jac(lf_J_lf.data(),lf_J_lf.rows(),lf_J_lf.cols());
+
+	  // RIGHT FOOT
+	  yarp::sig::Matrix w_J_rf;        
+	  if(!data->idynutils.iDyn3_model.getJacobian(r_foot_index,w_J_rf))
+	  {
+	      std::cout<<" !! ERROR : UNABLE TO GET r_sole JACOBIAN !! "<<std::endl;
+	      return out;
+	  }
+	  yarp::sig::Matrix w_T_rf = data->idynutils.iDyn3_model.getPosition(r_foot_index);
+	  yarp::sig::Matrix rf_Tr_w = locoman::utils::Homogeneous(locoman::utils::getRot(locoman::utils::iHomogeneous(w_T_rf)),null_vec);
+	  yarp::sig::Matrix rf_J_rf = locoman::utils::Adjoint(rf_Tr_w) * w_J_rf;
+	  Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > rf_jac(rf_J_rf.data(),rf_J_rf.rows(),rf_J_rf.cols());
+	  
+  // 	// WAIST
+	  yarp::sig::Matrix w_J_waist;        
+	  if(!data->idynutils.iDyn3_model.getJacobian(waist_index,w_J_waist))
+	  {
+	      std::cout<<" !! ERROR : UNABLE TO GET waist JACOBIAN !! "<<std::endl;
+	      return out;
+	  }
+	  yarp::sig::Matrix w_T_waist = data->idynutils.iDyn3_model.getPosition(waist_index);
+	  yarp::sig::Matrix waist_Tr_w = locoman::utils::Homogeneous(locoman::utils::getRot(locoman::utils::iHomogeneous(w_T_waist)),null_vec);
+	  yarp::sig::Matrix waist_J_waist = locoman::utils::Adjoint(waist_Tr_w) * w_J_waist;
+	  Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > waist_jac(waist_J_waist.data(),waist_J_waist.rows(),waist_J_waist.cols());
+	  
+	  // we use the floating base to perform the pseudoinverse, then we remove the extra joints velocity
+
+	  // final jacobian:
+	  // | Jcom |
+	  // | JLH  |
+	  // | JRH  |
+	  // | JLF  |
+	  // | JRF  |
+		  
+		  // matrix.block<p,q>(i,j) = Block of size (p,q), starting at (i,j)
+  //         data->jacobian.block<COM_DIM,WB_DOFS>(0,0) = com_jac.block<COM_DIM,WB_DOFS>(0,0); // removing orientation part :3
+  //         data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM,0) = lh_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+  //         data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + CARTESIAN_DIM,0) = rh_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+  //         data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 2*CARTESIAN_DIM,0) = lf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+  //         data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 3*CARTESIAN_DIM,0) = rf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+	  
+	  if(switch_control == 0)
+	  {
+	    data->jacobian.block<COM_DIM,WB_DOFS>(0,0) = com_jac.block<COM_DIM,WB_DOFS>(0,0); // removing orientation part :3
+	    data->jacobian.block<CARTESIAN_DIM-2,WB_DOFS>(COM_DIM,0) = lh_jac.block<CARTESIAN_DIM-2,WB_DOFS>(0,0);
+	    data->jacobian.block<1,WB_DOFS>(COM_DIM + CARTESIAN_DIM-2,0) = lh_jac.block<1,WB_DOFS>(5,0);
+	    data->jacobian.block<CARTESIAN_DIM -2,WB_DOFS>(COM_DIM + CARTESIAN_DIM -1,0) = rh_jac.block<CARTESIAN_DIM-2,WB_DOFS>(0,0);
+	    data->jacobian.block<1,WB_DOFS>(COM_DIM + 2 * CARTESIAN_DIM - 3,0) = rh_jac.block<1,WB_DOFS>(5,0);
+	    data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 2*CARTESIAN_DIM-2,0) = lf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+	    data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 3*CARTESIAN_DIM-2,0) = rf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+	  }
+	  else
+	  {
+	    data->jacobian.block<COM_DIM,WB_DOFS>(0,0) = waist_jac.block<COM_DIM,WB_DOFS>(0,0);
+	    data->jacobian.block<CARTESIAN_DIM-2,WB_DOFS>(COM_DIM,0) = lh_jac.block<CARTESIAN_DIM-2,WB_DOFS>(0,0);
+	    data->jacobian.block<1,WB_DOFS>(COM_DIM + CARTESIAN_DIM-2,0) = lh_jac.block<1,WB_DOFS>(5,0);
+	    data->jacobian.block<CARTESIAN_DIM -2,WB_DOFS>(COM_DIM + CARTESIAN_DIM -1,0) = rh_jac.block<CARTESIAN_DIM-2,WB_DOFS>(0,0);
+	    data->jacobian.block<1,WB_DOFS>(COM_DIM + 2 * CARTESIAN_DIM - 3,0) = rh_jac.block<1,WB_DOFS>(5,0);
+	    data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 2*CARTESIAN_DIM-2,0) = lf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+	    data->jacobian.block<CARTESIAN_DIM,WB_DOFS>(COM_DIM + 3*CARTESIAN_DIM-2,0) = rf_jac.block<CARTESIAN_DIM,WB_DOFS>(0,0);
+	  }
 	}
+
+
 
 	
 // 	std::cout<< "--- "<< COM_DIM + 4*CARTESIAN_DIM - 1 <<" ----"<<std::endl;
@@ -784,8 +890,14 @@ yarp::sig::Vector wholebody_ik::next_step(int switch_control, std::string chain,
 	else
 	{
 	  yarp::sig::Matrix f_T_waist_cur = data->idynutils.iDyn3_model.getPosition(waist_index);
-	  yarp::sig::Matrix f_T_b = data->idynutils.iDyn3_model.getPosition(base_index);
-	  yarp::sig::Matrix b_T_waist_cur = locoman::utils::iHomogeneous(f_T_b) * f_T_waist_cur;
+	  yarp::sig::Matrix b_T_waist_cur;
+	  if(chain == "wb_left" || chain == "wb_right")
+	  {
+	    yarp::sig::Matrix f_T_b = data->idynutils.iDyn3_model.getPosition(base_index);
+	    b_T_waist_cur = locoman::utils::iHomogeneous(f_T_b) * f_T_waist_cur;
+	  }
+	  else
+	    b_T_waist_cur = f_T_waist_cur;
 	  
 	  yarp::sig::Matrix b_T_waist_des(4,4);
 	  math_utilities::FrameKDLToYARP(data->desired_poses.at("Waist"),b_T_waist_des);
@@ -803,8 +915,14 @@ yarp::sig::Vector wholebody_ik::next_step(int switch_control, std::string chain,
         for(int limb_num=0;limb_num<4;limb_num++)
         {
 			yarp::sig::Matrix f_T_ee_cur = data->idynutils.iDyn3_model.getPosition(ee_index.at(limb_num));
-			yarp::sig::Matrix f_T_b = data->idynutils.iDyn3_model.getPosition(base_index);
-			yarp::sig::Matrix b_T_ee_cur = locoman::utils::iHomogeneous(f_T_b) * f_T_ee_cur;
+			yarp::sig::Matrix b_T_ee_cur;
+			if(chain == "wb_left" || chain == "wb_right")
+			{
+			  yarp::sig::Matrix f_T_b = data->idynutils.iDyn3_model.getPosition(base_index);
+			  b_T_ee_cur = locoman::utils::iHomogeneous(f_T_b) * f_T_ee_cur;
+			}
+			else
+			  b_T_ee_cur = f_T_ee_cur;
 
 			yarp::sig::Matrix b_T_ee_des(4,4);
 			math_utilities::FrameKDLToYARP(data->desired_poses.at(ee_names.at(limb_num)),b_T_ee_des);
