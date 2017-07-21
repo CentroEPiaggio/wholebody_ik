@@ -186,6 +186,8 @@ bool wholebody_ik::initialize(std::string chain, const yarp::sig::Vector& q_inpu
         std::cout<<red("!! - Error in setting floating base - !!")<<std::endl;
         return false;
     }
+    std::cout << (data->idynutils.iDyn3_model.getLinkIndex(data->get_base_link()))<< std::endl;
+    std::cout << "Floating Base link "<< data->idynutils.iDyn3_model.getFloatingBaseLink() << std::endl;
 
     int dofs = data->get_dofs();
     int dim;
@@ -218,6 +220,14 @@ bool wholebody_ik::initialize(std::string chain, const yarp::sig::Vector& q_inpu
     std::cout<<green("=---------------------------")<<std::endl;
 
     return true;
+}
+
+KDL::Frame wholebody_ik::w_position_of_link(std::string chain, std::string link_frame)
+{
+  int link_index = chains.at(chain)->idynutils.iDyn3_model.getLinkIndex(link_frame);
+  KDL::Frame pose_link = chains.at(chain)->idynutils.iDyn3_model.getPositionKDL(link_index);
+  
+  return pose_link;
 }
 
 void wholebody_ik::set_desired_wb_poses_as_current(std::string chain)
@@ -370,7 +380,7 @@ yarp::sig::Vector wholebody_ik::get_com_position_wrt_base_frame(std::string chai
 	if(chain == "wb_waist")
 	  return w_p_com;
 	else
-	return b_p_com;
+	  return b_p_com;
 }
 
 void wholebody_ik::getCom(std::string chain,KDL::Vector& com)
@@ -415,14 +425,27 @@ double wholebody_ik::cartToJnt(int switch_control, std::string chain, const yarp
     if(!chains.at(chain)->set) {warn_desired_not_set(chain); return -1;}
 
     int dofs = chains.at(chain)->get_dofs();
-    if(chains.at(chain)->wb) dofs -= FLOATING_BASE_DOFS;
+    if(chains.at(chain)->wb && (chain == "wb_left" || chain == "wb_right")) dofs -= FLOATING_BASE_DOFS;
 
     yarp::sig::Vector out(dofs,0.0);
     yarp::sig::Vector input(dofs,0.0);
+    yarp::sig::Vector q_input_1(dofs,0.0);
+    
+    
+    if(chain == "wb_waist")
+    {      
+      for(int k=6;k<dofs;k++)
+      {
+	q_input_1[k]=q_input[k-6];
+      }     
+    }
 
     if(q_input.size()>input.size()) chains.at(chain)->idynutils.fromIDynToRobot(q_input,input,*chains.at(chain)->kin_chain);
-    else input=q_input;
-
+    else 
+    {
+      input=q_input;
+      if(chain == "wb_waist") input=q_input_1;
+    }
     out = input;
     unsigned int i;
 
@@ -435,7 +458,7 @@ double wholebody_ik::cartToJnt(int switch_control, std::string chain, const yarp
     {
         yarp::sig::Vector temp=out;
         out=out+next_step(switch_control,chain,temp,precision)*d_t;
-	for(int k=0; k<dofs; k++)
+	for(int k=6; k<dofs; k++)
 	{
 	    if(out[k] > joint_max[k]) out[k] = joint_max[k];
 	    if(out[k] < joint_min[k]) out[k] = joint_min[k];
@@ -449,10 +472,23 @@ double wholebody_ik::cartToJnt(int switch_control, std::string chain, const yarp
         std::cout<<yellow(" --------------- WARNING Reached maximum number of iterations in cartToJnt --------------- ")<<std::endl;
         return -1;
     }
+    
+    if(chain == "wb_waist")
+    {
+      yarp::sig::Vector out_1(WB_DOFS-FLOATING_BASE_DOFS,0.0);
+      out_1 = out.subVector(6,dofs-1);
 
-    if(q_out.size()>out.size()) chains.at(chain)->idynutils.fromRobotToIDyn(out,q_out,*chains.at(chain)->kin_chain);
-    else q_out = out;
+      if(q_out.size()>out_1.size()) chains.at(chain)->idynutils.fromRobotToIDyn(out,q_out,*chains.at(chain)->kin_chain);
+      else q_out = out_1;
 
+    }
+    else
+    {
+      if(q_out.size()>out.size()) chains.at(chain)->idynutils.fromRobotToIDyn(out,q_out,*chains.at(chain)->kin_chain);
+      else q_out = out;
+    }
+
+    
     return chains.at(chain)->car_err;
 }
 
@@ -509,10 +545,19 @@ yarp::sig::Vector wholebody_ik::next_step(int switch_control, std::string chain,
     yarp::sig::Vector Eo(3);
     Eigen::Vector3d zero; zero.setZero();
     yarp::sig::Vector out(WB_DOFS-FLOATING_BASE_DOFS ,0.0);
-    if(!data->wb) out.resize(dofs ,0.0);
+    if(!data->wb || chain == "wb_waist") out.resize(dofs ,0.0);
     Eigen::MatrixXd d_q;
-
-	update_model(chain,q_input);
+    yarp::sig::Vector q_input_1(WB_DOFS-FLOATING_BASE_DOFS,0.0);
+    
+    if(chain == "wb_waist") 
+    {
+      q_input_1=q_input.subVector(6,dofs-1);
+      update_model(chain,q_input_1);
+    }
+    else
+    {
+      update_model(chain,q_input);
+    }
 
     //
     // ------ transforming the Jacobian in {B}
@@ -889,21 +934,30 @@ yarp::sig::Vector wholebody_ik::next_step(int switch_control, std::string chain,
 	}
 	else
 	{
-	  yarp::sig::Matrix f_T_waist_cur = data->idynutils.iDyn3_model.getPosition(waist_index);
-	  yarp::sig::Matrix b_T_waist_cur;
 	  if(chain == "wb_left" || chain == "wb_right")
 	  {
+	    yarp::sig::Matrix f_T_waist_cur = data->idynutils.iDyn3_model.getPosition(waist_index);
+	    yarp::sig::Matrix b_T_waist_cur;
+	  
 	    yarp::sig::Matrix f_T_b = data->idynutils.iDyn3_model.getPosition(base_index);
 	    b_T_waist_cur = locoman::utils::iHomogeneous(f_T_b) * f_T_waist_cur;
+	    
+	    yarp::sig::Matrix b_T_waist_des(4,4);
+	    math_utilities::FrameKDLToYARP(data->desired_poses.at("Waist"),b_T_waist_des);
+	    
+	    yarp::sig::Matrix cur_T_des = locoman::utils::iHomogeneous(b_T_waist_cur) * b_T_waist_des;
+	    math_utilities::vectorYARPToEigen(locoman::utils::getTrasl(cur_T_des),temp);
 	  }
 	  else
-	    b_T_waist_cur = f_T_waist_cur;
+	  {
+	    KDL::Frame ee_cur =  data->idynutils.iDyn3_model.getPositionKDL(waist_index);
+	    KDL::Frame ee_des =  data->desired_poses.at("Waist");
+	    
+	    KDL::Vector err = ee_des.p - ee_cur.p;
+	    math_utilities::vectorKDLToEigen(err,temp);
+	  }
 	  
-	  yarp::sig::Matrix b_T_waist_des(4,4);
-	  math_utilities::FrameKDLToYARP(data->desired_poses.at("Waist"),b_T_waist_des);
 	  
-	  yarp::sig::Matrix cur_T_des = locoman::utils::iHomogeneous(b_T_waist_cur) * b_T_waist_des;
-	  math_utilities::vectorYARPToEigen(locoman::utils::getTrasl(cur_T_des),temp);
 	}
 	
 	d_C.block<COM_DIM,1>(0,0) = temp;
@@ -914,97 +968,172 @@ yarp::sig::Vector wholebody_ik::next_step(int switch_control, std::string chain,
 
         for(int limb_num=0;limb_num<4;limb_num++)
         {
-			yarp::sig::Matrix f_T_ee_cur = data->idynutils.iDyn3_model.getPosition(ee_index.at(limb_num));
-			yarp::sig::Matrix b_T_ee_cur;
-			if(chain == "wb_left" || chain == "wb_right")
-			{
-			  yarp::sig::Matrix f_T_b = data->idynutils.iDyn3_model.getPosition(base_index);
-			  b_T_ee_cur = locoman::utils::iHomogeneous(f_T_b) * f_T_ee_cur;
-			}
-			else
-			  b_T_ee_cur = f_T_ee_cur;
-
-			yarp::sig::Matrix b_T_ee_des(4,4);
-			math_utilities::FrameKDLToYARP(data->desired_poses.at(ee_names.at(limb_num)),b_T_ee_des);
-
-			yarp::sig::Matrix cur_T_des = locoman::utils::iHomogeneous(b_T_ee_cur) * b_T_ee_des;
-			math_utilities::vectorYARPToEigen(locoman::utils::getTrasl(cur_T_des),temp);
 			
-			if(ee_names.at(limb_num) == "LSoftHand")
-			{
-			  d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num,0) = temp;
+	    yarp::sig::Matrix b_T_ee_cur;
+	    yarp::sig::Matrix cur_T_des;
+	    KDL::Frame ee_cur;
+	    KDL::Frame ee_des;
+	    if(chain == "wb_left" || chain == "wb_right")
+	    {
+	      yarp::sig::Matrix f_T_ee_cur = data->idynutils.iDyn3_model.getPosition(ee_index.at(limb_num));
+	      yarp::sig::Matrix f_T_b = data->idynutils.iDyn3_model.getPosition(base_index);
+	      b_T_ee_cur = locoman::utils::iHomogeneous(f_T_b) * f_T_ee_cur;
+	      yarp::sig::Matrix b_T_ee_des(4,4);
+	      math_utilities::FrameKDLToYARP(data->desired_poses.at(ee_names.at(limb_num)),b_T_ee_des);
+
+	      cur_T_des = locoman::utils::iHomogeneous(b_T_ee_cur) * b_T_ee_des;
+	      math_utilities::vectorYARPToEigen(locoman::utils::getTrasl(cur_T_des),temp);
+	      
+	      if(ee_names.at(limb_num) == "LSoftHand")
+	      {
+		d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num,0) = temp;
 // 			  std::cout << "--- "<< COM_DIM+CARTESIAN_DIM*limb_num <<" ---"<<std::endl;
-			}
-			else if (ee_names.at(limb_num) == "RSoftHand")
-			{
-			  d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num - 1,0) = temp;
+	      }
+	      else if (ee_names.at(limb_num) == "RSoftHand")
+	      {
+		d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num - 1,0) = temp;
 // 			  std::cout << "--- "<< COM_DIM+CARTESIAN_DIM*limb_num-1 <<" ---"<<std::endl;
-			}
-			else
-			{
-			  d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num - 2,0) = temp;
+	      }
+	      else
+	      {
+		d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num - 2,0) = temp;
 // 			  std::cout << "--- "<< COM_DIM+CARTESIAN_DIM*limb_num-2 <<" ---"<<std::endl;
-			}
-			
-// 			if(ee_names.at(limb_num) == "LSoftHand")
-// 			{
-// 			  d_C.block<3,1>(1+CARTESIAN_DIM*limb_num,0) = temp;
-// // 			  std::cout << "--- "<< 1+CARTESIAN_DIM*limb_num <<" ---"<<std::endl;
-// 			}
-// 			else if (ee_names.at(limb_num) == "RSoftHand")
-// 			{
-// 			  d_C.block<3,1>(CARTESIAN_DIM*limb_num,0) = temp;
-// // 			  std::cout << "--- "<< CARTESIAN_DIM*limb_num <<" ---"<<std::endl;
-// 			}
-// 			else
-// 			{
-// 			  d_C.block<3,1>(CARTESIAN_DIM*limb_num - 1,0) = temp;
-// // 			  std::cout << "--- "<< CARTESIAN_DIM*limb_num-1 <<" ---"<<std::endl;
-// 			}
-			
+	      }
+	      
+	      ee_d = locoman::utils::getRot(cur_T_des);
+	      Eo = locoman::utils::Orient_Error(ee_d, Eye_3);
+	      math_utilities::vectorYARPToEigen(Eo,temp);
 
-			ee_d = locoman::utils::getRot(cur_T_des);
-			Eo = locoman::utils::Orient_Error(ee_d, Eye_3);
-			math_utilities::vectorYARPToEigen(Eo,temp);
-			if( ee_names.at(limb_num)=="LSoftHand")
-			{
-			  d_C.block<1,1>(COM_DIM+CARTESIAN_DIM*limb_num+3,0) = temp.block<1,1>(0,0);
-			  d_C.block<1,1>(COM_DIM+CARTESIAN_DIM*limb_num+4,0) = temp.block<1,1>(2,0);
+	      if( ee_names.at(limb_num)=="LSoftHand")
+	      {
+	      d_C.block<1,1>(COM_DIM+CARTESIAN_DIM*limb_num+3,0) = temp.block<1,1>(0,0);
+	      d_C.block<1,1>(COM_DIM+CARTESIAN_DIM*limb_num+4,0) = temp.block<1,1>(2,0);
+
+
 // 			  std::cout << "--- "<< 1+CARTESIAN_DIM*limb_num+3 <<" ---"<<std::endl;
-			}
-			else if ( ee_names.at(limb_num)=="RSoftHand")
-			{
-			  d_C.block<1,1>(COM_DIM+CARTESIAN_DIM*limb_num+2,0) = temp.block<1,1>(0,0);
-			  d_C.block<1,1>(COM_DIM+CARTESIAN_DIM*limb_num+3,0) = temp.block<1,1>(2,0);
+	      }
+	      else if ( ee_names.at(limb_num)=="RSoftHand")
+	      {
+	      d_C.block<1,1>(COM_DIM+CARTESIAN_DIM*limb_num+2,0) = temp.block<1,1>(0,0);
+	      d_C.block<1,1>(COM_DIM+CARTESIAN_DIM*limb_num+3,0) = temp.block<1,1>(2,0);
 // 			  std::cout << "--- "<< CARTESIAN_DIM*limb_num+3 <<" ---"<<std::endl;
-			}
-			else if (ee_names.at(limb_num)=="l_sole"|| ee_names.at(limb_num)=="r_sole")
-			{
-			  d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num+1,0) = temp;
+		
+	      }
+	      else if (ee_names.at(limb_num)=="l_sole"|| ee_names.at(limb_num)=="r_sole")
+	      {
+		d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num+1,0) = temp;
 // 			  std::cout << "--- "<< CARTESIAN_DIM*limb_num+3-1 <<" ---"<<std::endl;
-			}
+	      }
+	      
+	    }
+	    else
+	    {
+	      ee_cur =  data->idynutils.iDyn3_model.getPositionKDL(ee_index.at(limb_num));
+	      ee_des =  data->desired_poses.at(ee_names.at(limb_num));
+	      
+	      KDL::Vector err = ee_des.p - ee_cur.p;
+	      math_utilities::vectorKDLToEigen(err,temp);
+	      
+	      
+	      if(ee_names.at(limb_num) == "LSoftHand")
+	      {
+		d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num,0) = temp;
+// 			  std::cout << "--- "<< COM_DIM+CARTESIAN_DIM*limb_num <<" ---"<<std::endl;
+	      }
+	      else if (ee_names.at(limb_num) == "RSoftHand")
+	      {
+		d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num - 1,0) = temp;
+// 			  std::cout << "--- "<< COM_DIM+CARTESIAN_DIM*limb_num-1 <<" ---"<<std::endl;
+	      }
+	      else
+	      {
+		d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num - 2,0) = temp;
+// 			  std::cout << "--- "<< COM_DIM+CARTESIAN_DIM*limb_num-2 <<" ---"<<std::endl;
+	      }
+	      
+	      yarp::sig::Matrix w_ee_cur(3,3);
+	      yarp::sig::Matrix w_ee_des(3,3);
+	      math_utilities::rotationKDLToYarp(ee_cur.M,w_ee_cur);
+	      math_utilities::rotationKDLToYarp(ee_des.M,w_ee_des);
+	      
+	      Eo = locoman::utils::Orient_Error(w_ee_des,w_ee_cur);
+	      math_utilities::vectorYARPToEigen(Eo,temp);
+
+	      if( ee_names.at(limb_num)=="LSoftHand")
+	      {
+		d_C.block<2,1>(COM_DIM+CARTESIAN_DIM*limb_num+3,0) = temp.block<2,1>(0,0);
+
+// 			  std::cout << "--- "<< 1+CARTESIAN_DIM*limb_num+3 <<" ---"<<std::endl;
+	      }
+	      else if ( ee_names.at(limb_num)=="RSoftHand")
+	      {
+		d_C.block<2,1>(COM_DIM+CARTESIAN_DIM*limb_num+2,0) = temp.block<2,1>(0,0);
+// 			  std::cout << "--- "<< CARTESIAN_DIM*limb_num+3 <<" ---"<<std::endl;
+		
+	      }
+	      else if (ee_names.at(limb_num)=="l_sole"|| ee_names.at(limb_num)=="r_sole")
+	      {
+		d_C.block<3,1>(COM_DIM+CARTESIAN_DIM*limb_num+1,0) = temp;
+// 			  std::cout << "--- "<< CARTESIAN_DIM*limb_num+3-1 <<" ---"<<std::endl;
+	      }
+		
+	    }
+	    
+// 	      if(ee_names.at(limb_num) == "LSoftHand")
+// 	      {
+// 		d_C.block<3,1>(1+CARTESIAN_DIM*limb_num,0) = temp;
+// // 			  std::cout << "--- "<< 1+CARTESIAN_DIM*limb_num <<" ---"<<std::endl;
+// 	      }
+// 	      else if (ee_names.at(limb_num) == "RSoftHand")
+// 	      {
+// 		d_C.block<3,1>(CARTESIAN_DIM*limb_num,0) = temp;
+// // 			  std::cout << "--- "<< CARTESIAN_DIM*limb_num <<" ---"<<std::endl;
+// 	      }
+// 	      else
+// 	      {
+// 		d_C.block<3,1>(CARTESIAN_DIM*limb_num - 1,0) = temp;
+// // 			  std::cout << "--- "<< CARTESIAN_DIM*limb_num-1 <<" ---"<<std::endl;
+// 	      }
 			
         }
 	
 // 	print_eigen_matrix_ndigits(d_C);
 // 	abort();
-        
+//         
 	if(!data->first_step) data->car_err= d_C.norm();
-        else data->first_step = false;
-
-        d_q = Eigen::Matrix<double,WB_DOFS-FLOATING_BASE_DOFS,1>();
+	else data->first_step = false;
+	std::cout<<"errore "<<d_C.norm()<<std::endl;
+        
+	
+	if(chain == "wb_waist")
+	{
+	  d_q = Eigen::Matrix<double,WB_DOFS,1>();
+	}
+	else
+	{
+	  d_q = Eigen::Matrix<double,WB_DOFS-FLOATING_BASE_DOFS,1>();
+	}
 
         Eigen::MatrixXd full_d_q = Eigen::Matrix<double,WB_DOFS,1>();
 
         if (!cartesian_action_completed(chain,precision)) // NOTE maybe not the best stop criterion
         {
-			Eigen::MatrixXd pinvJ = Eigen::Matrix<double,WB_DOFS,FULL_DIM - 2>();
+	    Eigen::MatrixXd pinvJ = Eigen::Matrix<double,WB_DOFS,FULL_DIM - 2>();
 
-			pinvJ = math_utilities::pseudoInverseDamped(data->jacobian, 0.1);
-			
-			full_d_q = pinvJ* d_C/d_t;
+	    pinvJ = math_utilities::pseudoInverseDamped(data->jacobian, 0.1);
+	    
+	    full_d_q = pinvJ* d_C/d_t;
+	    
+	    if(chain == "wb_waist")
+	    {
+	      d_q = full_d_q;
+	    }
+	    else
+	    {
+	      d_q.block<WB_DOFS-FLOATING_BASE_DOFS,1>(0,0) = full_d_q.block<WB_DOFS-FLOATING_BASE_DOFS,1>(6,0);
+	    }
 
-            d_q.block<WB_DOFS-FLOATING_BASE_DOFS,1>(0,0) = full_d_q.block<WB_DOFS-FLOATING_BASE_DOFS,1>(6,0);
+            
         }
         else
         {
@@ -1017,6 +1146,7 @@ yarp::sig::Vector wholebody_ik::next_step(int switch_control, std::string chain,
     {
          out[i] = d_q(i);
     }
+    
 
     // NOTE to fix one or more joint
 //     out[data->idynutils.iDyn3_model.getDOFIndex("WaistLat")] = 0.0;
@@ -1033,4 +1163,5 @@ wholebody_ik::~wholebody_ik()
     delete chains.at("left_leg");
     delete chains.at("wb_left");
     delete chains.at("wb_right");
+    delete chains.at("wb_waist");
 }

@@ -135,6 +135,8 @@ public:
     /**
      * FIXME
      */
+    
+    KDL::Frame w_position_of_link(std::string chain, std::string link_frame);
     void set_desired_wb_poses_as_current(std::string chain);
 
     /**
